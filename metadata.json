@@ -1,0 +1,6 @@
+{
+  "name": "ZENTRO — Beyond Limits",
+  "description": "Mobile-first ZENTRO UI prototype featuring customer membership tiers, demo activity tracking, team hierarchy visualization, and role-based admin management.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
