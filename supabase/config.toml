@@ -1,0 +1,4 @@
+project_id = "sbqzjqrotlrqlpyicjof"
+
+[functions.zentro-auth]
+verify_jwt = false
