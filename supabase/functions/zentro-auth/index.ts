@@ -61,15 +61,28 @@ async function getSessionSecret(): Promise<string> {
   if (storedError || !stored?.value) throw storedError || new Error("Unable to initialize session secret.");
   return String(stored.value);
 }
+async function sha256Hex(value: string): Promise<string> {
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", encoder.encode(value)));
+  return Array.from(digest, (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
 async function issueToken(payload: { userId: string; role: "customer" | "admin"; name: string }): Promise<string> {
-  const fullPayload = { ...payload, exp: Date.now() + SESSION_MAX_AGE };
+  const sessionId = crypto.randomUUID();
+  const fullPayload = { ...payload, sid: sessionId, exp: Date.now() + SESSION_MAX_AGE };
   const encoded = bytesToBase64Url(encoder.encode(JSON.stringify(fullPayload)));
   const secret = await getSessionSecret();
   const key = await crypto.subtle.importKey("raw", encoder.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
   const signature = new Uint8Array(await crypto.subtle.sign("HMAC", key, encoder.encode(encoded)));
-  return encoded + "." + bytesToBase64Url(signature);
+  const token = encoded + "." + bytesToBase64Url(signature);
+  const { error } = await db.from("auth_sessions").insert({
+    id: sessionId, user_id: payload.userId, role: payload.role,
+    token_hash: await sha256Hex(token), expires_at: new Date(fullPayload.exp).toISOString()
+  });
+  if (error) throw error;
+  await db.from("auth_sessions").delete().lt("expires_at", new Date(Date.now() - SESSION_MAX_AGE).toISOString());
+  await db.from("auth_attempts").delete().lt("attempted_at", new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString());
+  return token;
 }
-async function verifyToken(token: string): Promise<{ userId: string; role: "customer" | "admin"; name: string; exp: number } | null> {
+async function verifyToken(token: string): Promise<{ userId: string; role: "customer" | "admin"; name: string; exp: number; sid: string } | null> {
   const parts = token.split(".");
   if (parts.length !== 2) return null;
   try {
@@ -78,11 +91,23 @@ async function verifyToken(token: string): Promise<{ userId: string; role: "cust
     const valid = await crypto.subtle.verify("HMAC", key, base64UrlToBytes(parts[1]), encoder.encode(parts[0]));
     if (!valid) return null;
     const payload = JSON.parse(new TextDecoder().decode(base64UrlToBytes(parts[0])));
-    if (!payload || typeof payload.userId !== "string" || (payload.role !== "customer" && payload.role !== "admin") || typeof payload.exp !== "number" || payload.exp <= Date.now()) return null;
+    if (!payload || typeof payload.userId !== "string" || (payload.role !== "customer" && payload.role !== "admin") || typeof payload.exp !== "number" || payload.exp <= Date.now() || typeof payload.sid !== "string") return null;
+    const { data: session, error } = await db.from("auth_sessions").select("id")
+      .eq("id", payload.sid).eq("user_id", payload.userId).eq("role", payload.role)
+      .eq("token_hash", await sha256Hex(token)).is("revoked_at", null)
+      .gt("expires_at", new Date().toISOString()).maybeSingle();
+    if (error || !session) return null;
     return payload;
   } catch {
     return null;
   }
+}
+async function revokeToken(token: string): Promise<void> {
+  const payload = await verifyToken(token);
+  if (!payload) return;
+  const { error } = await db.from("auth_sessions").update({ revoked_at: new Date().toISOString() })
+    .eq("id", payload.sid).is("revoked_at", null);
+  if (error) throw error;
 }
 function parseCookie(header: string | null, name: string): string | null {
   if (!header) return null;
@@ -106,6 +131,52 @@ function normalizePhone(raw: string): string {
   if (/^0(9|7)\d{8}$/.test(cleaned)) return "251" + cleaned.slice(1);
   if (/^(9|7)\d{8}$/.test(cleaned)) return "251" + cleaned;
   return cleaned.toLowerCase();
+}
+function requestIp(req: Request): string {
+  return req.headers.get("cf-connecting-ip")?.trim()
+    || req.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
+    || req.headers.get("x-real-ip")?.trim()
+    || "";
+}
+async function authRateKeys(identifier: string, ip: string) {
+  return {
+    identifierHash: await sha256Hex("zentro-auth-id:" + identifier.toLowerCase()),
+    ipHash: await sha256Hex("zentro-auth-ip:" + (ip || "unknown:" + identifier.toLowerCase()))
+  };
+}
+async function isAuthRateLimited(action: "login" | "register", identifier: string, ip: string, windowMs: number, perIdentifier: number, perIp: number): Promise<boolean> {
+  const keys = await authRateKeys(identifier, ip);
+  const since = new Date(Date.now() - windowMs).toISOString();
+  const [byIdentifier, byIp] = await Promise.all([
+    db.from("auth_attempts").select("id", { count: "exact", head: true }).eq("action", action).eq("identifier_hash", keys.identifierHash).gte("attempted_at", since),
+    db.from("auth_attempts").select("id", { count: "exact", head: true }).eq("action", action).eq("ip_hash", keys.ipHash).gte("attempted_at", since)
+  ]);
+  if (byIdentifier.error) throw byIdentifier.error;
+  if (byIp.error) throw byIp.error;
+  return (byIdentifier.count || 0) >= perIdentifier || (byIp.count || 0) >= perIp;
+}
+async function recordAuthAttempt(action: "login" | "register", identifier: string, ip: string): Promise<void> {
+  const keys = await authRateKeys(identifier, ip);
+  const { error } = await db.from("auth_attempts").insert({ action, identifier_hash: keys.identifierHash, ip_hash: keys.ipHash });
+  if (error) throw error;
+}
+type DecodedImage = { ok: true; bytes: Uint8Array; mime: string; extension: string } | { ok: false; error: string; status: number };
+function decodeImageDataUrl(value: string): DecodedImage {
+  if (value.length > 3_000_000) return { ok: false, error: "Image must be 2 MB or smaller.", status: 413 };
+  const match = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/]+={0,2})$/i.exec(value);
+  if (!match) return { ok: false, error: "Upload a valid JPEG, PNG, or WebP image.", status: 400 };
+  let binary = "";
+  try { binary = atob(match[2]); } catch { return { ok: false, error: "Image data is invalid.", status: 400 }; }
+  if (!binary.length || binary.length > 2 * 1024 * 1024) return { ok: false, error: "Image must be 2 MB or smaller.", status: 413 };
+  const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+  const mime = match[1].toLowerCase();
+  const isPng = bytes.length >= 8 && [137,80,78,71,13,10,26,10].every((v,i) => bytes[i] === v);
+  const isJpeg = bytes.length >= 3 && bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255;
+  const isWebp = bytes.length >= 12 && String.fromCharCode(...bytes.slice(0,4)) === "RIFF" && String.fromCharCode(...bytes.slice(8,12)) === "WEBP";
+  if ((mime === "image/png" && !isPng) || (mime === "image/jpeg" && !isJpeg) || (mime === "image/webp" && !isWebp)) {
+    return { ok: false, error: "Image content does not match its declared file type.", status: 400 };
+  }
+  return { ok: true, bytes, mime, extension: mime === "image/jpeg" ? "jpg" : mime === "image/png" ? "png" : "webp" };
 }
 function adminUsername(): string {
   return "Zentro";
@@ -299,6 +370,9 @@ async function handle(req: Request): Promise<Response> {
     return json({ error: "Admin password is already configured." }, 409);
   }
   if (method === "POST" && route === "/auth/logout") {
+    const bearer = req.headers.get("authorization");
+    const token = bearer?.startsWith("Bearer ") ? bearer.slice(7).trim() : parseCookie(req.headers.get("cookie"), SESSION_COOKIE);
+    if (token) await revokeToken(token);
     return json({ ok: true }, 200, { "set-cookie": clearSessionCookie() });
   }
   if (method === "GET" && route === "/auth/session") {
@@ -307,12 +381,17 @@ async function handle(req: Request): Promise<Response> {
     const payload = await verifyToken(token);
     if (!payload) return json({ authenticated: false }, 200, { "set-cookie": clearSessionCookie() });
     if (payload.role === "admin") {
+      await revokeToken(token);
       const refreshed = await issueToken({ userId: "admin-1", role: "admin", name: adminUsername() });
       return json({ authenticated: true, token: refreshed, user: { id: "admin-1", name: adminUsername(), phone: adminUsername(), role: "admin" } }, 200, { "set-cookie": sessionCookie(refreshed) });
     }
     const { data: user, error } = await db.from("users").select("id,name,phone,status,terms_accepted").eq("id", payload.userId).maybeSingle();
     if (error) throw error;
-    if (!user || user.status === "Suspended") return json({ authenticated: false }, 200, { "set-cookie": clearSessionCookie() });
+    if (!user || user.status === "Suspended") {
+      await revokeToken(token);
+      return json({ authenticated: false }, 200, { "set-cookie": clearSessionCookie() });
+    }
+    await revokeToken(token);
     const refreshed = await issueToken({ userId: user.id, role: "customer", name: user.name });
     return json({ authenticated: true, token: refreshed, user: { id: user.id, name: user.name, phone: user.phone, role: "customer", termsAccepted: Boolean(user.terms_accepted) } }, 200, { "set-cookie": sessionCookie(refreshed) });
   }
@@ -321,10 +400,18 @@ async function handle(req: Request): Promise<Response> {
     const identifier = typeof body.identifier === "string" ? body.identifier.trim() : "";
     const password = typeof body.password === "string" ? body.password : "";
     if (!identifier || !password) return json({ error: "Enter your phone number or name and password." }, 400);
+    const loginKey = identifier.toLowerCase() === adminUsername().toLowerCase() ? "admin:" + adminUsername() : normalizePhone(identifier);
+    const ip = requestIp(req);
+    if (await isAuthRateLimited("login", loginKey, ip, 15 * 60 * 1000, 8, 30)) {
+      return json({ error: "Too many sign-in attempts. Please try again in 15 minutes." }, 429, { "retry-after": "900" });
+    }
     if (identifier.toLowerCase() === adminUsername().toLowerCase()) {
       const { data: secret, error } = await db.from("app_secrets").select("value").eq("key", "admin_password_hash").maybeSingle();
       if (error) throw error;
-      if (!secret?.value || !(await verifyPassword(password, String(secret.value)))) return json({ error: "Invalid credentials." }, 401);
+      if (!secret?.value || !(await verifyPassword(password, String(secret.value)))) {
+        await recordAuthAttempt("login", loginKey, ip);
+        return json({ error: "Invalid credentials." }, 401);
+      }
       const token = await issueToken({ userId: "admin-1", role: "admin", name: adminUsername() });
       return json({ token, user: { id: "admin-1", name: adminUsername(), phone: adminUsername(), role: "admin" } }, 200, { "set-cookie": sessionCookie(token) });
     }
@@ -333,7 +420,10 @@ async function handle(req: Request): Promise<Response> {
     if (!query.data && !query.error) query = await db.from("users").select("id,name,phone,password_hash,role,status,terms_accepted").ilike("name", identifier).limit(1).maybeSingle();
     if (query.error) throw query.error;
     const user = query.data;
-    if (!user || !(await verifyPassword(password, String(user.password_hash)))) return json({ error: "Invalid credentials." }, 401);
+    if (!user || !(await verifyPassword(password, String(user.password_hash)))) {
+      await recordAuthAttempt("login", loginKey, ip);
+      return json({ error: "Invalid credentials." }, 401);
+    }
     if (user.status === "Suspended") return json({ error: "Account suspended. Contact Support." }, 403);
     const token = await issueToken({ userId: user.id, role: "customer", name: user.name });
     return json({ token, user: { id: user.id, name: user.name, phone: user.phone, role: "customer", termsAccepted: Boolean(user.terms_accepted) } }, 200, { "set-cookie": sessionCookie(token) });
@@ -352,6 +442,17 @@ async function handle(req: Request): Promise<Response> {
     if (password !== confirmPassword) return json({ error: "Passwords do not match." }, 400);
     if (invitationCode && !/^\d{4,10}$/.test(invitationCode)) return json({ error: "Invitation code must be numeric." }, 400);
     const normalized = normalizePhone(phone);
+    if (!/^251[79]\d{8}$/.test(normalized)) return json({ error: "Enter a valid Ethiopian mobile number." }, 400);
+    const ip = requestIp(req);
+    if (await isAuthRateLimited("register", normalized, ip, 60 * 60 * 1000, 3, 10)) {
+      return json({ error: "Too many registration attempts. Please try again in one hour." }, 429, { "retry-after": "3600" });
+    }
+    await recordAuthAttempt("register", normalized, ip);
+    if (invitationCode) {
+      const { data: inviter, error: inviterError } = await db.from("users").select("id").eq("invitation_code", invitationCode).eq("role", "customer").maybeSingle();
+      if (inviterError) throw inviterError;
+      if (!inviter) return json({ error: "Invitation code was not found." }, 400);
+    }
     const existingPhone = await db.from("users").select("id").eq("phone_normalized", normalized).maybeSingle();
     if (existingPhone.error) throw existingPhone.error;
     const { data: allUsers, error: allUsersError } = await db.from("users").select("id,name").limit(10000);
@@ -359,7 +460,6 @@ async function handle(req: Request): Promise<Response> {
     if (existingPhone.data || (allUsers || []).some((u) => String(u.name).trim().toLowerCase() === name.toLowerCase())) {
       return json({ error: "Account already exists. Please login instead." }, 409);
     }
-    const settings = await getPaymentSettings();
     let inviteCode = "";
     for (let attempt = 0; attempt < 30; attempt++) {
       const random = new Uint32Array(1);
@@ -686,17 +786,30 @@ async function handle(req: Request): Promise<Response> {
     const message = typeof body.message === "string" ? body.message.trim() : "";
     const targetUserId = typeof body.targetUserId === "string" && body.targetUserId ? body.targetUserId : null;
     if (!title || title.length > 120 || !message || message.length > 5000) return json({ error: "Enter a title and message." }, 400);
-    if (body.imageDataUrl) return json({ error: "Image uploads are not configured yet. Send this broadcast without an image." }, 400);
+    if (body.imageDataUrl !== undefined && body.imageDataUrl !== null && typeof body.imageDataUrl !== "string") return json({ error: "Image data must be a base64 data URL." }, 400);
     if (targetUserId) {
       const { data: target, error: targetError } = await db.from("users").select("id").eq("id", targetUserId).eq("role", "customer").maybeSingle();
       if (targetError) throw targetError;
       if (!target) return json({ error: "Target customer not found." }, 404);
     }
+    let imageFilename: string | null = null;
+    if (typeof body.imageDataUrl === "string" && body.imageDataUrl.trim()) {
+      const parsed = decodeImageDataUrl(body.imageDataUrl);
+      if (!parsed.ok) return json({ error: parsed.error }, parsed.status);
+      imageFilename = crypto.randomUUID() + "." + parsed.extension;
+      const { error: uploadError } = await db.storage.from("zentro-broadcasts").upload(imageFilename, parsed.bytes, {
+        contentType: parsed.mime, cacheControl: "3600", upsert: false
+      });
+      if (uploadError) throw uploadError;
+    }
     const id = "bcast-" + crypto.randomUUID().slice(0, 12);
     const { error } = await db.from("broadcast_messages").insert({
-      id, title, message, image_filename: null, target_user_id: targetUserId, created_by: adminUsername()
+      id, title, message, image_filename: imageFilename, target_user_id: targetUserId, created_by: adminUsername()
     });
-    if (error) throw error;
+    if (error) {
+      if (imageFilename) await db.storage.from("zentro-broadcasts").remove([imageFilename]);
+      throw error;
+    }
     const recipients = targetUserId
       ? [{ id: targetUserId }]
       : (await db.from("users").select("id").eq("role", "customer")).data || [];
@@ -708,11 +821,12 @@ async function handle(req: Request): Promise<Response> {
       const notifyResult = await db.from("notifications").insert(notifications);
       if (notifyResult.error) throw notifyResult.error;
     }
-    await db.from("audit_logs").insert({
+    const { error: auditError } = await db.from("audit_logs").insert({
       id: "aud-" + crypto.randomUUID().slice(0, 12), actor: adminUsername(),
       action: "Broadcast created", target: id, details: targetUserId || "all customers"
     });
-    return json({ ok: true, id, imageFilename: null }, 201);
+    if (auditError) throw auditError;
+    return json({ ok: true, id, imageFilename }, 201);
   }
 
   if (method === "GET" && route === "/admin/payment-settings") {
@@ -777,7 +891,27 @@ async function handle(req: Request): Promise<Response> {
 
   const uploadMatch = route.match(/^\/uploads\/([^/]+)$/);
   if (method === "GET" && uploadMatch) {
-    return json({ error: "File storage is not configured for this release." }, 404);
+    const auth = await getAuth(req);
+    if (!auth) return json({ error: "Authentication required." }, 401);
+    const filename = decodeURIComponent(uploadMatch[1]);
+    if (!/^[a-f0-9-]{36}\.(?:jpg|png|webp)$/.test(filename)) return json({ error: "File not found." }, 404);
+    let visibleQuery = db.from("broadcast_messages").select("id").eq("image_filename", filename);
+    if (auth.role !== "admin") visibleQuery = visibleQuery.or("target_user_id.is.null,target_user_id.eq." + auth.userId);
+    const { data: visibleBroadcast, error: visibilityError } = await visibleQuery.limit(1).maybeSingle();
+    if (visibilityError) throw visibilityError;
+    if (!visibleBroadcast) return json({ error: "File not found." }, 404);
+    const { data: file, error: downloadError } = await db.storage.from("zentro-broadcasts").download(filename);
+    if (downloadError || !file) return json({ error: "File not found." }, 404);
+    const mime = file.type && ["image/jpeg","image/png","image/webp"].includes(file.type) ? file.type : "application/octet-stream";
+    return new Response(file, {
+      status: 200,
+      headers: {
+        "content-type": mime,
+        "cache-control": "private, max-age=300",
+        "x-content-type-options": "nosniff",
+        "content-disposition": "inline; filename=\"" + filename + "\""
+      }
+    });
   }
 
   return json({ error: "This API endpoint is not enabled in the current preview deployment.", route }, 501);
