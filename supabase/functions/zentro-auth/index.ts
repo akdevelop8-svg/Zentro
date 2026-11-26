@@ -200,7 +200,7 @@ async function getCustomerProfile(userId: string) {
     db.from("notifications").select("*").eq("user_id", userId).order("created_at", { ascending: false }).limit(50),
     db.from("feedback_messages").select("*").eq("user_id", userId).order("created_at", { ascending: false }),
     db.from("activities").select("*").eq("user_id", userId).order("created_at", { ascending: false }).limit(30),
-    db.from("broadcast_messages").select("*").is("target_user_id", null).order("created_at", { ascending: false }).limit(1),
+    db.from("broadcast_messages").select("*").or("target_user_id.is.null,target_user_id.eq." + userId).order("created_at", { ascending: false }).limit(1),
     db.from("users").select("id,name,phone,invitation_code,invited_by_code,created_at").eq("role", "customer"),
     db.from("purchased_plans").select("user_id,tier,purchased_at").order("purchased_at", { ascending: false }),
   ]);
@@ -375,7 +375,7 @@ async function handle(req: Request): Promise<Response> {
     const { data: user, error: insertError } = await db.from("users").insert({
       id: userId, name, phone, phone_normalized: normalized, password_hash: passwordHash,
       role: "customer", status: "Active", invitation_code: inviteCode,
-      invited_by_code: invitationCode || null, wallet_balance_etb: settings.registrationBonusEtb,
+      invited_by_code: invitationCode || null, wallet_balance_etb: 0,
       total_deposit_etb: 0, total_withdraw_etb: 0, total_commission_etb: 0, terms_accepted: false,
     }).select("id,name,phone,role,terms_accepted").single();
     if (insertError) {
@@ -383,8 +383,8 @@ async function handle(req: Request): Promise<Response> {
       throw insertError;
     }
     const stamp = new Date().toISOString();
-    await db.from("activities").insert({ id: "act-" + crypto.randomUUID().slice(0, 8), user_id: userId, action: "Registered (" + settings.registrationBonusEtb + " ETB Bonus)", plan_tier: "Member", status: "Completed", created_at: stamp });
-    await db.from("notifications").insert({ id: "ntf-" + crypto.randomUUID().slice(0, 8), user_id: userId, title: "Welcome to ZENTRO", message: "Welcome " + name + "! Your account has been created with a " + settings.registrationBonusEtb + " ETB registration bonus.", type: "info", is_read: false, created_at: stamp });
+    await db.from("activities").insert({ id: "act-" + crypto.randomUUID().slice(0, 8), user_id: userId, action: "Registered", plan_tier: "Member", status: "Completed", created_at: stamp });
+    await db.from("notifications").insert({ id: "ntf-" + crypto.randomUUID().slice(0, 8), user_id: userId, title: "Welcome to ZENTRO", message: "Welcome " + name + "! Your ZENTRO account has been created. Financial features are currently disabled.", type: "info", is_read: false, created_at: stamp });
     const token = await issueToken({ userId, role: "customer", name });
     return json({ token, user: { id: user.id, name: user.name, phone: user.phone, role: "customer", termsAccepted: false } }, 201, { "set-cookie": sessionCookie(token) });
   }
@@ -427,9 +427,359 @@ async function handle(req: Request): Promise<Response> {
     if (error) throw error;
     return json({ ok: true });
   }
-  if (route.startsWith("/plans/") || route.startsWith("/welfare/") || route === "/deposits" || route === "/withdrawals") {
-    return json({ error: "Financial transactions are disabled on this preview until the production accounting and transfer controls have been verified." }, 503);
+
+  // Customer support is available while financial functions remain disabled.
+  if (method === "POST" && route === "/support") {
+    const auth = await getAuth(req);
+    if (!auth) return json({ error: "Authentication required." }, 401);
+    if (auth.role !== "customer") return json({ error: "Customer account required." }, 403);
+    const body = await req.json().catch(() => ({}));
+    const category = typeof body.category === "string" ? body.category.trim() : "";
+    const subject = typeof body.subject === "string" ? body.subject.trim() : "";
+    const message = typeof body.message === "string" ? body.message.trim() : "";
+    if (!category || !subject || subject.length > 120 || message.length < 5 || message.length > 5000) {
+      return json({ error: "Enter a subject and a message between 5 and 5000 characters." }, 400);
+    }
+    const id = "fb-" + crypto.randomUUID().slice(0, 12);
+    const { error } = await db.from("feedback_messages").insert({
+      id, user_id: auth.userId, category, subject, message, status: "Unread"
+    });
+    if (error) throw error;
+    return json({ ok: true, id }, 201);
   }
+
+  // All administrative data routes require a signed administrator session.
+  if (route.startsWith("/admin/")) {
+    const auth = await getAuth(req);
+    if (!auth) return json({ error: "Administrator authentication required." }, 401);
+    if (auth.role !== "admin") return json({ error: "Administrator access required." }, 403);
+  }
+
+  if (method === "GET" && route === "/admin/overview") {
+    const [customers, active, deposits, withdrawals, unread, broadcasts, audit] = await Promise.all([
+      db.from("users").select("id", { count: "exact", head: true }).eq("role", "customer"),
+      db.from("users").select("id", { count: "exact", head: true }).eq("role", "customer").eq("status", "Active"),
+      db.from("deposit_requests").select("id", { count: "exact", head: true }).eq("status", "Pending"),
+      db.from("withdrawal_requests").select("id", { count: "exact", head: true }).eq("status", "Pending"),
+      db.from("feedback_messages").select("id", { count: "exact", head: true }).eq("status", "Unread"),
+      db.from("broadcast_messages").select("id", { count: "exact", head: true }),
+      db.from("audit_logs").select("id,actor,action,target,details,created_at").order("created_at", { ascending: false }).limit(10),
+    ]);
+    for (const r of [customers, active, deposits, withdrawals, unread, broadcasts, audit]) if (r.error) throw r.error;
+    return json({
+      totalCustomers: customers.count || 0,
+      activeCustomers: active.count || 0,
+      pendingDeposits: deposits.count || 0,
+      pendingWithdrawals: withdrawals.count || 0,
+      unreadFeedback: unread.count || 0,
+      totalBroadcasts: broadcasts.count || 0,
+      recentAuditLogs: (audit.data || []).map((a) => ({
+        id: a.id, actor: a.actor, action: a.action, target: a.target, details: a.details, timestamp: a.created_at
+      })),
+    });
+  }
+
+  if (method === "GET" && route === "/admin/customers") {
+    const q = (url.searchParams.get("q") || "").trim();
+    const status = url.searchParams.get("status") || "All";
+    let query = db.from("users")
+      .select("id,name,phone,status,invitation_code,invited_by_code,created_at,bank_account_name,bank_account_number,bank_method")
+      .eq("role", "customer")
+      .order("created_at", { ascending: false })
+      .limit(500);
+    if (status === "Active" || status === "Suspended") query = query.eq("status", status);
+    if (q) query = query.or("name.ilike.%" + q.replace(/[,%()]/g, " ") + "%,phone.ilike.%" + q.replace(/[,%()]/g, " ") + "%,invitation_code.eq." + q.replace(/[,%()]/g, ""));
+    const { data, error } = await query;
+    if (error) throw error;
+    return json({ customers: (data || []).map((u) => ({
+      id: u.id, name: u.name, phone: u.phone, status: u.status,
+      invitationCode: u.invitation_code, invitedByCode: u.invited_by_code,
+      registeredAt: u.created_at, bankAccountName: u.bank_account_name,
+      bankAccountNumber: u.bank_account_number, bankMethod: u.bank_method
+    })) });
+  }
+
+  const customerDetailMatch = route.match(/^\/admin\/customers\/([^/]+)$/);
+  if (method === "GET" && customerDetailMatch) {
+    const customerId = decodeURIComponent(customerDetailMatch[1]);
+    const [userRes, depositsRes, withdrawalsRes, plansRes, checkRes, feedbackRes, activitiesRes, membersRes] = await Promise.all([
+      db.from("users").select("id,name,phone,status,invitation_code,invited_by_code,created_at,bank_account_name,bank_account_number,bank_method,terms_accepted").eq("id", customerId).eq("role", "customer").maybeSingle(),
+      db.from("deposit_requests").select("id,amount_etb,reference_code,payment_method_name,status,rejection_reason,created_at").eq("user_id", customerId).order("created_at", { ascending: false }),
+      db.from("withdrawal_requests").select("id,amount_etb,fee_etb,net_amount_etb,payment_method_name,customer_account_number,status,rejection_reason,created_at,processed_at").eq("user_id", customerId).order("created_at", { ascending: false }),
+      db.from("purchased_plans").select("id,tier,investment_etb,daily_income_etb,cycle_days,purchased_at,status").eq("user_id", customerId).order("purchased_at", { ascending: false }),
+      db.from("check_in_history").select("id,claimed_at,reward_etb").eq("user_id", customerId).order("claimed_at", { ascending: false }).limit(50),
+      db.from("feedback_messages").select("id,category,subject,message,status,admin_reply,replied_at,created_at").eq("user_id", customerId).order("created_at", { ascending: false }),
+      db.from("activities").select("id,action,plan_tier,status,created_at").eq("user_id", customerId).order("created_at", { ascending: false }).limit(50),
+      db.from("users").select("id,name,phone,invitation_code,invited_by_code,created_at").eq("role", "customer"),
+    ]);
+    for (const r of [userRes,depositsRes,withdrawalsRes,plansRes,checkRes,feedbackRes,activitiesRes,membersRes]) if (r.error) throw r.error;
+    const u = userRes.data;
+    if (!u) return json({ error: "Customer not found." }, 404);
+    const inviter = u.invited_by_code ? (membersRes.data || []).find((m) => m.invitation_code === u.invited_by_code) : null;
+    const direct = (membersRes.data || []).filter((m) => m.invited_by_code === u.invitation_code);
+    const directCodes = new Set(direct.map((m) => m.invitation_code));
+    const team = direct.map((m) => ({
+      id: m.id, name: m.name, phone: m.phone, registeredAt: m.created_at, tier: "Member", level: 1, invitedBy: "Direct"
+    }));
+    for (const m of (membersRes.data || [])) {
+      if (m.invited_by_code && directCodes.has(m.invited_by_code)) {
+        team.push({ id: m.id, name: m.name, phone: m.phone, registeredAt: m.created_at, tier: "Member", level: 2, invitedBy: "Team" });
+      }
+    }
+    return json({
+      customer: {
+        id: u.id, name: u.name, phone: u.phone, status: u.status,
+        invitationCode: u.invitation_code, invitedByCode: u.invited_by_code,
+        registeredAt: u.created_at, bankAccountName: u.bank_account_name,
+        bankAccountNumber: u.bank_account_number, bankMethod: u.bank_method,
+        termsAccepted: Boolean(u.terms_accepted),
+        inviter: inviter ? { id: inviter.id, name: inviter.name, phone: inviter.phone, invitationCode: inviter.invitation_code } : null
+      },
+      deposits: (depositsRes.data || []).map((d) => ({
+        id: d.id, amountEtb: Number(d.amount_etb), referenceCode: d.reference_code,
+        paymentMethodName: d.payment_method_name, status: d.status,
+        rejectionReason: d.rejection_reason, createdAt: d.created_at
+      })),
+      withdrawals: (withdrawalsRes.data || []).map((w) => ({
+        id: w.id, amountEtb: Number(w.amount_etb), feeEtb: Number(w.fee_etb),
+        netAmountEtb: Number(w.net_amount_etb), paymentMethodName: w.payment_method_name,
+        accountNumber: w.customer_account_number, status: w.status,
+        rejectionReason: w.rejection_reason, createdAt: w.created_at, processedAt: w.processed_at
+      })),
+      purchasedPlans: (plansRes.data || []).map((p) => ({
+        id: p.id, tier: p.tier, investmentEtb: Number(p.investment_etb),
+        dailyIncomeEtb: Number(p.daily_income_etb), cycleDays: p.cycle_days,
+        purchaseDate: p.purchased_at, status: p.status
+      })),
+      checkInHistory: (checkRes.data || []).map((c) => ({ id: c.id, timestamp: c.claimed_at, rewardEtb: Number(c.reward_etb) })),
+      feedback: (feedbackRes.data || []).map((f) => ({
+        id: f.id, category: f.category, subject: f.subject, message: f.message,
+        status: f.status, adminReply: f.admin_reply, repliedAt: f.replied_at, createdAt: f.created_at
+      })),
+      activities: (activitiesRes.data || []).map((a) => ({
+        id: a.id, action: a.action, planTier: a.plan_tier, status: a.status, timestamp: a.created_at
+      })),
+      team,
+    });
+  }
+
+  const customerStatusMatch = route.match(/^\/admin\/customers\/([^/]+)\/status$/);
+  if (method === "PATCH" && customerStatusMatch) {
+    const customerId = decodeURIComponent(customerStatusMatch[1]);
+    const body = await req.json().catch(() => ({}));
+    if (body.status !== "Active" && body.status !== "Suspended") return json({ error: "Invalid customer status." }, 400);
+    const { data, error } = await db.from("users").update({ status: body.status }).eq("id", customerId).eq("role", "customer").select("status").maybeSingle();
+    if (error) throw error;
+    if (!data) return json({ error: "Customer not found." }, 404);
+    await db.from("audit_logs").insert({
+      id: "aud-" + crypto.randomUUID().slice(0, 12), actor: adminUsername(),
+      action: "Customer status changed", target: customerId, details: String(body.status)
+    });
+    return json({ ok: true, status: data.status });
+  }
+
+  if (method === "GET" && route === "/admin/deposits") {
+    const [requests, customers] = await Promise.all([
+      db.from("deposit_requests").select("*").order("created_at", { ascending: false }).limit(500),
+      db.from("users").select("id,name,phone").eq("role", "customer")
+    ]);
+    if (requests.error) throw requests.error;
+    if (customers.error) throw customers.error;
+    const users = new Map((customers.data || []).map((u) => [u.id, u]));
+    return json({ deposits: (requests.data || []).map((d) => {
+      const u = users.get(d.user_id);
+      return {
+        id: d.id, userId: d.user_id, customerName: u?.name || "Unknown",
+        customerPhone: u?.phone || "", amountEtb: Number(d.amount_etb),
+        referenceCode: d.reference_code, paymentMethodName: d.payment_method_name,
+        accountName: d.account_name, accountNumber: d.account_number,
+        receiptFilename: d.receipt_filename, status: d.status,
+        rejectionReason: d.rejection_reason, reviewedBy: d.reviewed_by,
+        reviewedAt: d.reviewed_at, createdAt: d.created_at
+      };
+    }) });
+  }
+
+  if (method === "GET" && route === "/admin/withdrawals") {
+    const [requests, customers] = await Promise.all([
+      db.from("withdrawal_requests").select("*").order("created_at", { ascending: false }).limit(500),
+      db.from("users").select("id,name,phone").eq("role", "customer")
+    ]);
+    if (requests.error) throw requests.error;
+    if (customers.error) throw customers.error;
+    const users = new Map((customers.data || []).map((u) => [u.id, u]));
+    return json({ withdrawals: (requests.data || []).map((w) => {
+      const u = users.get(w.user_id);
+      return {
+        id: w.id, userId: w.user_id, customerName: u?.name || "Unknown",
+        customerPhone: u?.phone || "", amountEtb: Number(w.amount_etb),
+        feeEtb: Number(w.fee_etb), netAmountEtb: Number(w.net_amount_etb),
+        paymentMethodName: w.payment_method_name, customerAccountName: w.customer_account_name,
+        customerAccountNumber: w.customer_account_number, status: w.status,
+        rejectionReason: w.rejection_reason, reviewedBy: w.reviewed_by,
+        processedAt: w.processed_at, createdAt: w.created_at
+      };
+    }) });
+  }
+
+  if (method === "GET" && route === "/admin/feedback") {
+    const [feedback, customers] = await Promise.all([
+      db.from("feedback_messages").select("*").order("created_at", { ascending: false }).limit(500),
+      db.from("users").select("id,name,phone").eq("role", "customer")
+    ]);
+    if (feedback.error) throw feedback.error;
+    if (customers.error) throw customers.error;
+    const users = new Map((customers.data || []).map((u) => [u.id, u]));
+    return json({ feedback: (feedback.data || []).map((f) => {
+      const u = users.get(f.user_id);
+      return {
+        id: f.id, userId: f.user_id, customerName: u?.name || "Unknown",
+        customerPhone: u?.phone || "", category: f.category, subject: f.subject,
+        message: f.message, status: f.status, adminReply: f.admin_reply,
+        repliedAt: f.replied_at, createdAt: f.created_at
+      };
+    }) });
+  }
+
+  const feedbackStatusMatch = route.match(/^\/admin\/feedback\/([^/]+)\/status$/);
+  if (method === "PATCH" && feedbackStatusMatch) {
+    const feedbackId = decodeURIComponent(feedbackStatusMatch[1]);
+    const body = await req.json().catch(() => ({}));
+    if (body.status !== "Read" && body.status !== "Resolved") return json({ error: "Invalid feedback status." }, 400);
+    const { error } = await db.from("feedback_messages").update({ status: body.status }).eq("id", feedbackId);
+    if (error) throw error;
+    return json({ ok: true });
+  }
+
+  const feedbackReplyMatch = route.match(/^\/admin\/feedback\/([^/]+)\/reply$/);
+  if (method === "POST" && feedbackReplyMatch) {
+    const feedbackId = decodeURIComponent(feedbackReplyMatch[1]);
+    const body = await req.json().catch(() => ({}));
+    const reply = typeof body.reply === "string" ? body.reply.trim() : "";
+    if (!reply || reply.length > 5000) return json({ error: "Enter a reply up to 5000 characters." }, 400);
+    const { error } = await db.from("feedback_messages")
+      .update({ admin_reply: reply, replied_at: new Date().toISOString(), status: "Resolved" })
+      .eq("id", feedbackId);
+    if (error) throw error;
+    return json({ ok: true });
+  }
+
+  if (method === "GET" && route === "/admin/broadcasts") {
+    const { data, error } = await db.from("broadcast_messages").select("*").order("created_at", { ascending: false }).limit(200);
+    if (error) throw error;
+    const targetIds = [...new Set((data || []).map((b) => b.target_user_id).filter(Boolean))];
+    const targetUsers = targetIds.length
+      ? await db.from("users").select("id,name").in("id", targetIds)
+      : { data: [], error: null };
+    if (targetUsers.error) throw targetUsers.error;
+    const users = new Map((targetUsers.data || []).map((u) => [u.id, u.name]));
+    return json({ broadcasts: (data || []).map((b) => ({
+      id: b.id, title: b.title, message: b.message, imageFilename: b.image_filename,
+      targetUserId: b.target_user_id, targetCustomerName: b.target_user_id ? users.get(b.target_user_id) || "Unknown" : null,
+      createdBy: b.created_by, createdAt: b.created_at
+    })) });
+  }
+
+  if (method === "POST" && route === "/admin/broadcasts") {
+    const body = await req.json().catch(() => ({}));
+    const title = typeof body.title === "string" ? body.title.trim() : "";
+    const message = typeof body.message === "string" ? body.message.trim() : "";
+    const targetUserId = typeof body.targetUserId === "string" && body.targetUserId ? body.targetUserId : null;
+    if (!title || title.length > 120 || !message || message.length > 5000) return json({ error: "Enter a title and message." }, 400);
+    if (body.imageDataUrl) return json({ error: "Image uploads are not configured yet. Send this broadcast without an image." }, 400);
+    if (targetUserId) {
+      const { data: target, error: targetError } = await db.from("users").select("id").eq("id", targetUserId).eq("role", "customer").maybeSingle();
+      if (targetError) throw targetError;
+      if (!target) return json({ error: "Target customer not found." }, 404);
+    }
+    const id = "bcast-" + crypto.randomUUID().slice(0, 12);
+    const { error } = await db.from("broadcast_messages").insert({
+      id, title, message, image_filename: null, target_user_id: targetUserId, created_by: adminUsername()
+    });
+    if (error) throw error;
+    const recipients = targetUserId
+      ? [{ id: targetUserId }]
+      : (await db.from("users").select("id").eq("role", "customer")).data || [];
+    if (recipients.length) {
+      const notifications = recipients.map((u) => ({
+        id: "ntf-" + crypto.randomUUID().slice(0, 12), user_id: u.id,
+        title, message, type: "info", is_read: false
+      }));
+      const notifyResult = await db.from("notifications").insert(notifications);
+      if (notifyResult.error) throw notifyResult.error;
+    }
+    await db.from("audit_logs").insert({
+      id: "aud-" + crypto.randomUUID().slice(0, 12), actor: adminUsername(),
+      action: "Broadcast created", target: id, details: targetUserId || "all customers"
+    });
+    return json({ ok: true, id, imageFilename: null }, 201);
+  }
+
+  if (method === "GET" && route === "/admin/payment-settings") {
+    return json(await getPaymentSettings());
+  }
+
+  if (method === "PUT" && route === "/admin/payment-settings") {
+    return json({ error: "Financial settings cannot be activated in this release." }, 503);
+    const body = await req.json().catch(() => ({}));
+    const numericFields = [
+      "withdrawalStartHour", "withdrawalEndHour", "minWithdrawalEtb", "minRechargeEtb",
+      "withdrawalFeePercent", "registrationBonusEtb", "dailyCheckInEtb",
+      "level1CommissionPercent", "level2CommissionPercent", "level3CommissionPercent"
+    ];
+    const row: Record<string, unknown> = { id: "default", updated_at: new Date().toISOString() };
+    const mapping: Record<string, string> = {
+      depositMethods: "deposit_methods_json", withdrawalMethods: "withdrawal_methods_json",
+      withdrawalStartHour: "withdrawal_start_hour", withdrawalEndHour: "withdrawal_end_hour",
+      enforceWithdrawalHours: "enforce_withdrawal_hours", withdrawalScheduleNote: "withdrawal_schedule_note",
+      minWithdrawalEtb: "min_withdrawal_etb", minRechargeEtb: "min_recharge_etb",
+      withdrawalFeePercent: "withdrawal_fee_percent", registrationBonusEtb: "registration_bonus_etb",
+      dailyCheckInEtb: "daily_check_in_etb", level1CommissionPercent: "level1_commission_percent",
+      level2CommissionPercent: "level2_commission_percent", level3CommissionPercent: "level3_commission_percent"
+    };
+    for (const [key, column] of Object.entries(mapping)) {
+      if (body[key] === undefined) continue;
+      if (key === "depositMethods" || key === "withdrawalMethods") {
+        if (!Array.isArray(body[key])) return json({ error: "Payment methods must be arrays." }, 400);
+        row[column] = body[key];
+      } else if (numericFields.includes(key)) {
+        const value = Number(body[key]);
+        if (!Number.isFinite(value) || value < 0) return json({ error: "Invalid payment setting: " + key }, 400);
+        row[column] = value;
+      } else {
+        row[column] = body[key];
+      }
+    }
+    // No payment endpoint is enabled by changing settings; this only stores configuration.
+    const { error } = await db.from("payment_settings").upsert(row, { onConflict: "id" });
+    if (error) throw error;
+    return json(await getPaymentSettings());
+  }
+
+  if (method === "GET" && route === "/admin/audit-logs") {
+    const { data, error } = await db.from("audit_logs").select("id,actor,action,target,details,created_at").order("created_at", { ascending: false }).limit(500);
+    if (error) throw error;
+    return json({ auditLogs: (data || []).map((a) => ({
+      id: a.id, actor: a.actor, action: a.action, target: a.target, details: a.details, timestamp: a.created_at
+    })) });
+  }
+
+  // Funds movement, investment purchases, reward credits, and their admin actions
+  // are hard-disabled in this release. Configuration and read-only records remain available.
+  if (
+    route === "/me/check-in" || route === "/gift-code" ||
+    route === "/plans/buy" || route.startsWith("/plans/") ||
+    route.startsWith("/welfare/") || route === "/deposits" || route === "/withdrawals" ||
+    /^\/admin\/(deposits|withdrawals)\/[^/]+\/(approve|reject|process)$/.test(route)
+  ) {
+    return json({ error: "Financial functions are disabled in this release. No money will be accepted, credited, debited, or transferred." }, 503);
+  }
+
+  const uploadMatch = route.match(/^\/uploads\/([^/]+)$/);
+  if (method === "GET" && uploadMatch) {
+    return json({ error: "File storage is not configured for this release." }, 404);
+  }
+
   return json({ error: "This API endpoint is not enabled in the current preview deployment.", route }, 501);
 }
 
