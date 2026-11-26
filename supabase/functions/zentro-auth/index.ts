@@ -249,17 +249,42 @@ async function getCustomerProfile(userId: string) {
 async function handle(req: Request): Promise<Response> {
   const url = new URL(req.url);
   const originalPath = url.pathname;
-  const marker = "/functions/v1/zentro-auth";
-  const markerIndex = originalPath.lastIndexOf(marker);
-  let route = markerIndex >= 0
-    ? originalPath.slice(markerIndex + marker.length)
-    : originalPath;
-  if (route.startsWith("/api/")) route = route.slice(4);
-  if (route === "/api") route = "/";
-  // Normalize both the full Supabase function path and a suffix-only path.
-  if (!route.startsWith("/")) route = "/" + route;
-  while (route.length > 1 && route.endsWith("/")) route = route.slice(0, -1);
+  let normalizedPath = originalPath;
+  while (normalizedPath.length > 1 && normalizedPath.endsWith("/")) {
+    normalizedPath = normalizedPath.slice(0, -1);
+  }
+  const knownSuffixes = [
+    "/auth/admin-bootstrap-status",
+    "/auth/admin-bootstrap",
+    "/auth/session",
+    "/auth/logout",
+    "/auth/login",
+    "/auth/register",
+    "/payment-settings",
+    "/me/accept-terms",
+    "/me/bank-account",
+    "/notifications/read",
+    "/me",
+  ];
+  // Vercel's external rewrite can leave the full /functions/v1/... prefix
+  // in the Edge request URL. Match known endpoint suffixes independent of prefix.
+  const matchedSuffix = knownSuffixes.find((suffix) => normalizedPath.endsWith(suffix));
+  let route: string;
+  if (matchedSuffix) {
+    route = matchedSuffix;
+  } else {
+    const segments = normalizedPath.split("/").filter(Boolean);
+    const functionIndex = segments.lastIndexOf("zentro-auth");
+    const apiIndex = segments.lastIndexOf("api");
+    const suffixSegments = functionIndex >= 0
+      ? segments.slice(functionIndex + 1)
+      : apiIndex >= 0
+        ? segments.slice(apiIndex + 1)
+        : segments;
+    route = "/" + suffixSegments.join("/");
+  }
   const method = req.method.toUpperCase();
+  console.log("ZENTRO_API_ROUTE", JSON.stringify({ method, originalPath, route }));
 
   if (method === "GET" && route === "/payment-settings") {
     const settings = await getPaymentSettings();
