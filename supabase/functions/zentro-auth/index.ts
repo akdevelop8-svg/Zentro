@@ -163,7 +163,7 @@ async function recordAuthAttempt(action: "login" | "register", identifier: strin
 type DecodedImage = { ok: true; bytes: Uint8Array; mime: string; extension: string } | { ok: false; error: string; status: number };
 function decodeImageDataUrl(value: string): DecodedImage {
   if (value.length > 3_000_000) return { ok: false, error: "Image must be 2 MB or smaller.", status: 413 };
-  const match = /^data:(image\\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/]+={0,2})$/i.exec(value);
+  const match = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/]+={0,2})$/i.exec(value);
   if (!match) return { ok: false, error: "Upload a valid JPEG, PNG, or WebP image.", status: 400 };
   let binary = "";
   try { binary = atob(match[2]); } catch { return { ok: false, error: "Image data is invalid.", status: 400 }; }
@@ -442,7 +442,7 @@ async function handle(req: Request): Promise<Response> {
     if (password !== confirmPassword) return json({ error: "Passwords do not match." }, 400);
     if (invitationCode && !/^\d{4,10}$/.test(invitationCode)) return json({ error: "Invitation code must be numeric." }, 400);
     const normalized = normalizePhone(phone);
-    if (!/^251[79]\\d{8}$/.test(normalized)) return json({ error: "Enter a valid Ethiopian mobile number." }, 400);
+    if (!/^251[79]\d{8}$/.test(normalized)) return json({ error: "Enter a valid Ethiopian mobile number." }, 400);
     const ip = requestIp(req);
     if (await isAuthRateLimited("register", normalized, ip, 60 * 60 * 1000, 3, 10)) {
       return json({ error: "Too many registration attempts. Please try again in one hour." }, 429, { "retry-after": "3600" });
@@ -894,7 +894,7 @@ async function handle(req: Request): Promise<Response> {
     const auth = await getAuth(req);
     if (!auth) return json({ error: "Authentication required." }, 401);
     const filename = decodeURIComponent(uploadMatch[1]);
-    if (!/^[a-f0-9-]{36}\\.(?:jpg|png|webp)$/.test(filename)) return json({ error: "File not found." }, 404);
+    if (!/^[a-f0-9-]{36}\.(?:jpg|png|webp)$/.test(filename)) return json({ error: "File not found." }, 404);
     let visibleQuery = db.from("broadcast_messages").select("id").eq("image_filename", filename);
     if (auth.role !== "admin") visibleQuery = visibleQuery.or("target_user_id.is.null,target_user_id.eq." + auth.userId);
     const { data: visibleBroadcast, error: visibilityError } = await visibleQuery.limit(1).maybeSingle();
