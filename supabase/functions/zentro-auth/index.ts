@@ -248,12 +248,17 @@ async function getCustomerProfile(userId: string) {
 
 async function handle(req: Request): Promise<Response> {
   const url = new URL(req.url);
-  let route = url.pathname;
+  const originalPath = url.pathname;
   const marker = "/functions/v1/zentro-auth";
-  const markerIndex = route.indexOf(marker);
-  if (markerIndex >= 0) route = route.slice(markerIndex + marker.length) || "/";
+  const markerIndex = originalPath.lastIndexOf(marker);
+  let route = markerIndex >= 0
+    ? originalPath.slice(markerIndex + marker.length)
+    : originalPath;
   if (route.startsWith("/api/")) route = route.slice(4);
   if (route === "/api") route = "/";
+  // Normalize both the full Supabase function path and a suffix-only path.
+  if (!route.startsWith("/")) route = "/" + route;
+  while (route.length > 1 && route.endsWith("/")) route = route.slice(0, -1);
   const method = req.method.toUpperCase();
 
   if (method === "GET" && route === "/payment-settings") {
