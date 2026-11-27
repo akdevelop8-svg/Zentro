@@ -807,7 +807,7 @@ async function handle(req: Request): Promise<Response> {
   }
 
 
-  const depositActionMatch = route.match(/^\\/admin\\/deposits\\/([^/]+)\\/(approve|reject)$/);
+  const depositActionMatch = route.match(/^\/admin\/deposits\/([^/]+)\/(approve|reject)$/);
   if (method === "POST" && depositActionMatch) {
     const depositId = decodeURIComponent(depositActionMatch[1]);
     if (depositActionMatch[2] === "approve") {
@@ -823,7 +823,7 @@ async function handle(req: Request): Promise<Response> {
     return json({ ok: true });
   }
 
-  const withdrawalActionMatch = route.match(/^\\/admin\\/withdrawals\\/([^/]+)\\/(approve|reject|process)$/);
+  const withdrawalActionMatch = route.match(/^\/admin\/withdrawals\/([^/]+)\/(approve|reject|process)$/);
   if (method === "POST" && withdrawalActionMatch) {
     const withdrawalId = decodeURIComponent(withdrawalActionMatch[1]);
     if (withdrawalActionMatch[2] === "approve") {
@@ -967,11 +967,11 @@ async function handle(req: Request): Promise<Response> {
         const id = typeof method.id === "string" ? method.id.trim() : "";
         const methodName = typeof method.methodName === "string" ? method.methodName.trim() : "";
         const accountName = typeof method.accountName === "string" ? method.accountName.trim() : "";
-        const accountNumber = typeof method.accountNumber === "string" ? method.accountNumber.replace(/\\s+/g, "") : "";
+        const accountNumber = typeof method.accountNumber === "string" ? method.accountNumber.replace(/\s+/g, "") : "";
         if (!/^[a-zA-Z0-9_-]{2,40}$/.test(id) || !methodName || methodName.length > 60 ||
             accountName.length < 2 || accountName.length > 100 || !accountNumber || accountNumber.length > 40 ||
             typeof method.enabled !== "boolean") return json({ error: "Complete each bank method with a valid name, account details, and enabled status." }, 400);
-        if (key === "depositMethods" && method.enabled && !/^\\d{8,18}$/.test(accountNumber)) return json({ error: "Deposit account numbers must contain 8–18 digits." }, 400);
+        if (key === "depositMethods" && method.enabled && !/^\d{8,18}$/.test(accountNumber)) return json({ error: "Deposit account numbers must contain 8–18 digits." }, 400);
         normalized.push({ id, methodName, accountName, accountNumber, enabled: method.enabled });
       }
       row[key === "depositMethods" ? "deposit_methods_json" : "withdrawal_methods_json"] = normalized;
