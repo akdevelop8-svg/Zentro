@@ -43,6 +43,7 @@ const DEFAULT_PUBLIC_SETTINGS: PaymentSettings = {
   enforceWithdrawalHours: false,
   withdrawalScheduleNote: '',
   ...FALLBACK_FINANCIAL_RULES,
+  commissionBase: 'none',
   updatedAt: '',
 };
 
