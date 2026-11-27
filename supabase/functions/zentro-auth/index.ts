@@ -325,6 +325,7 @@ async function handle(req: Request): Promise<Response> {
     normalizedPath = normalizedPath.slice(0, -1);
   }
   const knownSuffixes = [
+    "/admin/payment-settings",
     "/auth/admin-bootstrap-status",
     "/auth/admin-bootstrap",
     "/auth/session",
