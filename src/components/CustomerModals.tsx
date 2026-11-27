@@ -9,6 +9,9 @@ import {
   ShieldCheck,
   Upload,
   X,
+  Megaphone,
+  Headphones,
+  MessageCircle,
 } from 'lucide-react';
 import { WELFARE_PLAN_IMAGES } from '../assets/planImages';
 import {
@@ -17,7 +20,6 @@ import {
   apiCreateDeposit,
   apiCreateWithdrawal,
   apiMarkNotificationsRead,
-  apiSubmitSupport,
   apiVerifyGiftCode,
   uploadImageUrl,
   FINANCIAL_FEATURES_ENABLED,
@@ -25,7 +27,6 @@ import {
 import {
   ActiveModal,
   CustomerAccount,
-  FeedbackItem,
   NotificationItem,
   PaymentSettings,
 } from '../types/zentro';
@@ -42,7 +43,6 @@ interface CustomerModalsProps {
   purchasedCount: number;
   settings: PaymentSettings;
   notifications: NotificationItem[];
-  feedbackMessages: FeedbackItem[];
   onClose: () => void;
   onRefreshMe: () => Promise<void>;
 }
@@ -53,7 +53,6 @@ export const CustomerModals: React.FC<CustomerModalsProps> = ({
   purchasedCount,
   settings,
   notifications,
-  feedbackMessages,
   onClose,
   onRefreshMe,
 }) => {
@@ -88,15 +87,6 @@ export const CustomerModals: React.FC<CustomerModalsProps> = ({
   } | null>(null);
   const [giftLoading, setGiftLoading] = useState(false);
 
-  // Support state
-  const [supportSubject, setSupportSubject] = useState('');
-  const [supportCategory, setSupportCategory] =
-    useState<FeedbackItem['category']>('General Inquiry');
-  const [supportMessage, setSupportMessage] = useState('');
-  const [supportSent, setSupportSent] = useState(false);
-  const [supportError, setSupportError] = useState<string | null>(null);
-  const [supportLoading, setSupportLoading] = useState(false);
-
   // Plan buy state
   const [planError, setPlanError] = useState<string | null>(null);
   const [planSuccess, setPlanSuccess] = useState<string | null>(null);
@@ -119,8 +109,6 @@ export const CustomerModals: React.FC<CustomerModalsProps> = ({
     setPlanSuccess(null);
     setWelfareError(null);
     setWelfareSuccess(null);
-    setSupportSent(false);
-    setSupportError(null);
     setGiftFeedback(null);
   }, [modal?.type, settings.minRechargeEtb, settings.minWithdrawalEtb]);
 
@@ -231,27 +219,6 @@ export const CustomerModals: React.FC<CustomerModalsProps> = ({
       setGiftFeedback({ ok: false, message: (err as Error).message });
     } finally {
       setGiftLoading(false);
-    }
-  };
-
-  const handleSupportSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSupportError(null);
-    setSupportLoading(true);
-    try {
-      await apiSubmitSupport({
-        category: supportCategory,
-        subject: supportSubject.trim(),
-        message: supportMessage.trim(),
-      });
-      await onRefreshMe();
-      setSupportSent(true);
-      setSupportSubject('');
-      setSupportMessage('');
-    } catch (err) {
-      setSupportError((err as Error).message);
-    } finally {
-      setSupportLoading(false);
     }
   };
 
@@ -724,125 +691,60 @@ export const CustomerModals: React.FC<CustomerModalsProps> = ({
             </form>
           )}
 
-          {/* SUPPORT */}
+          {/* SUPPORT — direct official Telegram links only */}
           {modal.type === 'support' && (
-            <div className="space-y-4">
-              {supportSent ? (
-                <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5 text-center space-y-3">
-                  <CheckCircle2 className="h-7 w-7 text-emerald-600 mx-auto" />
-                  <h3 className="font-display text-base font-bold text-slate-950">
-                    Message Sent
-                  </h3>
-                  <button
-                    type="button"
-                    onClick={onClose}
-                    className="min-h-[42px] px-5 rounded-xl bg-blue-700 text-white text-xs font-semibold cursor-pointer"
-                  >
-                    Done
-                  </button>
-                </div>
-              ) : (
-                <form onSubmit={handleSupportSubmit} className="space-y-3" noValidate>
-                  <div>
-                    <label
-                      htmlFor="support-category"
-                      className="block text-xs font-semibold text-slate-800 mb-1"
-                    >
-                      Category
-                    </label>
-                    <select
-                      id="support-category"
-                      value={supportCategory}
-                      onChange={(e) =>
-                        setSupportCategory(e.target.value as FeedbackItem['category'])
-                      }
-                      className="w-full min-h-[44px] px-3.5 py-2 rounded-xl border border-slate-200 bg-white text-sm text-slate-950 focus:outline-none focus:ring-2 focus:ring-blue-600"
-                    >
-                      <option value="General Inquiry">General Inquiry</option>
-                      <option value="Technical Feedback">Technical Feedback</option>
-                      <option value="Account Issue">Account Issue</option>
-                      <option value="Complaint">Complaint</option>
-                    </select>
-                  </div>
+            <div className="space-y-3">
+              <p className="text-sm leading-relaxed text-slate-600">
+                Connect with the official ZENTRO community and support team on Telegram.
+              </p>
 
-                  <div>
-                    <label
-                      htmlFor="support-subject"
-                      className="block text-xs font-semibold text-slate-800 mb-1"
-                    >
-                      Subject
-                    </label>
-                    <input
-                      id="support-subject"
-                      type="text"
-                      value={supportSubject}
-                      onChange={(e) => setSupportSubject(e.target.value)}
-                      placeholder="Subject"
-                      className="w-full min-h-[44px] px-3.5 py-2 rounded-xl border border-slate-200 bg-white text-sm text-slate-950 focus:outline-none focus:ring-2 focus:ring-blue-600"
-                    />
-                  </div>
+              <a
+                href="https://t.me/socialmedia976"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex min-h-[68px] items-center gap-3 rounded-2xl border border-blue-200 bg-blue-50/60 p-4 transition-colors hover:bg-blue-100"
+              >
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-700 text-white">
+                  <Megaphone className="h-5 w-5" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-bold text-slate-950">Official Channel</span>
+                  <span className="block text-xs text-slate-600">@socialmedia976</span>
+                </span>
+                <span className="text-xs font-semibold text-blue-800">Open Telegram ↗</span>
+              </a>
 
-                  <div>
-                    <label
-                      htmlFor="support-message"
-                      className="block text-xs font-semibold text-slate-800 mb-1"
-                    >
-                      Message
-                    </label>
-                    <textarea
-                      id="support-message"
-                      rows={3}
-                      value={supportMessage}
-                      onChange={(e) => setSupportMessage(e.target.value)}
-                      placeholder="Write your message..."
-                      className="w-full px-3.5 py-2 rounded-xl border border-slate-200 bg-white text-sm text-slate-950 focus:outline-none focus:ring-2 focus:ring-blue-600"
-                    />
-                  </div>
+              <a
+                href="https://t.me/zenetro1"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex min-h-[68px] items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50/60 p-4 transition-colors hover:bg-emerald-100"
+              >
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-700 text-white">
+                  <Headphones className="h-5 w-5" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-bold text-slate-950">Customer Service</span>
+                  <span className="block text-xs text-slate-600">@zenetro1</span>
+                </span>
+                <span className="text-xs font-semibold text-emerald-800">Open Telegram ↗</span>
+              </a>
 
-                  {supportError && (
-                    <div
-                      role="alert"
-                      className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700"
-                    >
-                      {supportError}
-                    </div>
-                  )}
-
-                  <button
-                    type="submit"
-                    disabled={supportLoading}
-                    className="w-full min-h-[46px] rounded-xl bg-blue-700 hover:bg-blue-800 disabled:opacity-60 text-white text-sm font-semibold transition-colors cursor-pointer"
-                  >
-                    {supportLoading ? 'Sending...' : 'Submit Feedback'}
-                  </button>
-                </form>
-              )}
-
-              {feedbackMessages.length > 0 && (
-                <div className="pt-3 border-t border-slate-100 space-y-2">
-                  <p className="text-xs font-semibold text-slate-700">Your Support History</p>
-                  {feedbackMessages.slice(0, 4).map((fb) => (
-                    <div
-                      key={fb.id}
-                      className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs space-y-1"
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="font-semibold text-slate-950">{fb.subject}</span>
-                        <span className="text-[11px] font-semibold text-blue-800">
-                          {fb.status}
-                        </span>
-                      </div>
-                      <p className="text-slate-700">{fb.message}</p>
-                      {fb.adminReply && (
-                        <p className="rounded-lg bg-white border border-amber-200 px-2.5 py-1.5 text-slate-900">
-                          <span className="font-semibold text-amber-800">Admin Reply: </span>
-                          {fb.adminReply}
-                        </p>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
+              <a
+                href="https://t.me/zentrodisscuss"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex min-h-[68px] items-center gap-3 rounded-2xl border border-amber-200 bg-amber-50/60 p-4 transition-colors hover:bg-amber-100"
+              >
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-600 text-white">
+                  <MessageCircle className="h-5 w-5" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-bold text-slate-950">Discussion Group</span>
+                  <span className="block text-xs text-slate-600">@zentrodisscuss</span>
+                </span>
+                <span className="text-xs font-semibold text-amber-800">Open Telegram ↗</span>
+              </a>
             </div>
           )}
 
