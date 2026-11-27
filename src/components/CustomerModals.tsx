@@ -699,7 +699,7 @@ export const CustomerModals: React.FC<CustomerModalsProps> = ({
               </p>
 
               <a
-                href="https://t.me/socialmedia976"
+                href="https://t.me/zenetro"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex min-h-[68px] items-center gap-3 rounded-2xl border border-blue-200 bg-blue-50/60 p-4 transition-colors hover:bg-blue-100"
@@ -709,7 +709,7 @@ export const CustomerModals: React.FC<CustomerModalsProps> = ({
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="block text-sm font-bold text-slate-950">Official Channel</span>
-                  <span className="block text-xs text-slate-600">@socialmedia976</span>
+                  <span className="block text-xs text-slate-600">@zenetro</span>
                 </span>
                 <span className="text-xs font-semibold text-blue-800">Open Telegram ↗</span>
               </a>
