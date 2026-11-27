@@ -9,7 +9,7 @@ import {
   ShieldCheck,
   Wallet,
 } from 'lucide-react';
-import { ROTATING_BANNER_SLIDES, WELFARE_PLANS } from '../utils/zentroLogic';
+import { calculateTotalProfitEtb, ROTATING_BANNER_SLIDES, WELFARE_PLANS } from '../utils/zentroLogic';
 import { DAILY_PLAN_IMAGES, WELFARE_PLAN_IMAGES } from '../assets/planImages';
 import { FINANCIAL_FEATURES_ENABLED, uploadImageUrl } from '../services/api';
 import { ActiveModal, BroadcastItem, VipPlan, WelfarePlan } from '../types/zentro';
@@ -357,6 +357,12 @@ export const HomeView: React.FC<HomeViewProps> = ({
                               {plan.cycleDays} Days
                             </span>
                           </div>
+                          <div className="flex items-center justify-between gap-1 border-t border-amber-100 pt-1.5">
+                            <span className="font-semibold text-slate-800">Total Profit</span>
+                            <span className="font-mono tabular-nums font-bold text-emerald-700">
+                              {calculateTotalProfitEtb(plan.dailyIncomeEtb, plan.cycleDays).toLocaleString()} ETB
+                            </span>
+                          </div>
                         </div>
                       </div>
 
@@ -465,6 +471,12 @@ export const HomeView: React.FC<HomeViewProps> = ({
                             <span className="text-slate-600">Duration</span>
                             <span className="font-mono tabular-nums font-semibold text-slate-900">
                               {plan.durationDays} Days
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between gap-1 border-t border-amber-100 pt-1.5">
+                            <span className="font-semibold text-slate-800">Total Profit</span>
+                            <span className="font-mono tabular-nums font-bold text-emerald-700">
+                              {calculateTotalProfitEtb(plan.dailyAmountEtb, plan.durationDays).toLocaleString()} ETB
                             </span>
                           </div>
                         </div>
