@@ -1034,8 +1034,8 @@ async function handle(req: Request): Promise<Response> {
   // They remain unavailable until the plan lifecycle has passed staging tests and is explicitly enabled.
   const isPlanAction =
     (method === "POST" && (route === "/plans/buy" || route === "/welfare/buy")) ||
-    (method === "POST" && /^/plans/[^/]+/claim$/.test(route)) ||
-    (method === "POST" && /^/welfare/[^/]+/(claim|release)$/.test(route));
+    (method === "POST" && new RegExp("^/plans/[^/]+/claim$").test(route)) ||
+    (method === "POST" && new RegExp("^/welfare/[^/]+/(claim|release)$").test(route));
 
   if (isPlanAction) {
     if (Deno.env.get("ZENTRO_PLAN_FEATURES_ENABLED") !== "true") {
