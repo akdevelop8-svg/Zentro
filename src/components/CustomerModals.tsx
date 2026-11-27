@@ -137,18 +137,7 @@ export const CustomerModals: React.FC<CustomerModalsProps> = ({
   const isBankTransferModal = modal.type === 'recharge' || modal.type === 'withdraw';
   const isOtherFinancialModal = ['giftcode', 'plan', 'welfare'].includes(modal.type);
   if ((!BANK_TRANSFER_FEATURES_ENABLED && isBankTransferModal) || (!FINANCIAL_FEATURES_ENABLED && isOtherFinancialModal)) {
-    return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 backdrop-blur-xs p-4">
-        <div role="dialog" aria-modal="true" aria-labelledby="financial-paused-title" className="w-full max-w-sm rounded-2xl border border-amber-200 bg-white p-5 shadow-xl space-y-3">
-          <div className="flex items-center gap-2 text-amber-700">
-            <Lock className="h-5 w-5" />
-            <h2 id="financial-paused-title" className="font-display text-base font-bold text-slate-950">Feature temporarily paused</h2>
-          </div>
-          <p className="text-sm leading-relaxed text-slate-700">ZENTRO financial actions are disabled until the owner confirms the funds and authorizes the official release. No deposit, withdrawal, purchase, gift-code, or reward operation can be completed now.</p>
-          <button type="button" onClick={onClose} className="w-full min-h-[42px] rounded-xl bg-blue-700 text-white text-sm font-semibold">Close</button>
-        </div>
-      </div>
-    );
+    return null;
   }
 
   const selectedDepositMethod =
