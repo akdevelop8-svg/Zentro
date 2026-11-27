@@ -101,7 +101,6 @@ export const MeView: React.FC<MeViewProps> = ({
   }, [currentUser.bankAccount, defaultMethod]);
 
   const checkInStatus = getCheckInStatus(currentUser.lastCheckInAt, nowMs);
-  const meetsWithdrawalReq = true;
 
   const handleClaimCheckIn = async () => {
     if (checkInSubmitting || !checkInStatus.canClaim) return;
