@@ -155,12 +155,6 @@ export const HomeView: React.FC<HomeViewProps> = ({
         )}
       </section>
 
-      {/* Financial actions remain paused until release approval. */}
-      {!FINANCIAL_FEATURES_ENABLED && (
-        <p className="rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-xs font-medium text-amber-900">
-          Deposits, withdrawals, gift codes, rewards, and plan purchases are paused until ZENTRO is officially released.
-        </p>
-      )}
       {/* 4 Shortcut Actions */}
       <section aria-label="Quick shortcuts">
         <div className="grid grid-cols-4 gap-2 sm:gap-3">
@@ -372,7 +366,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                         onClick={() => onOpenModal({ type: 'plan', plan })}
                         className="w-full min-h-[40px] sm:min-h-[44px] rounded-xl bg-blue-700 text-white text-xs sm:text-sm font-semibold transition-colors cursor-not-allowed opacity-50 disabled:cursor-not-allowed"
                       >
-                        {FINANCIAL_FEATURES_ENABLED ? 'Buy Plan' : 'Available after release'}
+                        Buy Plan
                       </button>
                     </div>
                   </article>
@@ -488,7 +482,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                         onClick={() => onOpenModal({ type: 'welfare', plan })}
                         className="w-full min-h-[40px] sm:min-h-[44px] rounded-xl border border-amber-400 bg-gradient-to-r from-blue-700 to-blue-800 text-white text-xs sm:text-sm font-semibold transition-colors cursor-not-allowed opacity-50 disabled:cursor-not-allowed"
                       >
-                        {FINANCIAL_FEATURES_ENABLED ? 'Buy Plan' : 'Available after release'}
+                        Buy Plan
                       </button>
                     </div>
                   </article>
