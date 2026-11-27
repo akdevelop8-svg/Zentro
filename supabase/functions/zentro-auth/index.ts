@@ -31,6 +31,9 @@ const WELFARE_PLANS = [
 
 // Hard release lock: plan transactions stay disabled until isolated staging validation is complete.
 const PLAN_ACTIONS_RELEASED = false;
+const REWARD_CLAIMS_RELEASED = false;
+const REGISTRATION_BONUS_RELEASED = false;
+const TEAM_COMMISSION_RELEASED = false;
 
 function json(data: unknown, status = 200, headers: HeadersInit = {}) {
   return new Response(JSON.stringify(data), {
@@ -226,7 +229,8 @@ function settingsFromRow(row: Record<string, unknown>) {
     dailyCheckInEtb: Number(row.daily_check_in_etb ?? 5),
     level1CommissionPercent: Number(row.level1_commission_percent ?? 15),
     level2CommissionPercent: Number(row.level2_commission_percent ?? 2),
-    level3CommissionPercent: Number(row.level3_commission_percent ?? 1),
+    level3CommissionPercent: Number(row.level3_commission_percent ?? 0),
+    commissionBase: String(row.commission_base ?? "none"),
     updatedAt: String(row.updated_at ?? new Date().toISOString()),
   };
 }
@@ -240,7 +244,8 @@ async function getPaymentSettings() {
       withdrawal_schedule_note: "Withdrawals are available from 04:00 to 23:00 Ethiopia time",
       min_withdrawal_etb: 150, min_recharge_etb: 700, withdrawal_fee_percent: 17,
       registration_bonus_etb: 150, daily_check_in_etb: 5,
-      level1_commission_percent: 15, level2_commission_percent: 2, level3_commission_percent: 1,
+      level1_commission_percent: 0, level2_commission_percent: 0, level3_commission_percent: 0,
+      commission_base: "none",
     };
     const result = await db.from("payment_settings").upsert(defaults, { onConflict: "id", ignoreDuplicates: true });
     if (result.error) throw result.error;
@@ -502,6 +507,10 @@ async function handle(req: Request): Promise<Response> {
     const stamp = new Date().toISOString();
     await db.from("activities").insert({ id: "act-" + crypto.randomUUID().slice(0, 8), user_id: userId, action: "Registered", plan_tier: "Member", status: "Completed", created_at: stamp });
     await db.from("notifications").insert({ id: "ntf-" + crypto.randomUUID().slice(0, 8), user_id: userId, title: "Welcome to ZENTRO", message: "Welcome " + name + "! Your ZENTRO account has been created.", type: "info", is_read: false, created_at: stamp });
+    if (REGISTRATION_BONUS_RELEASED) {
+      const { error: bonusError } = await db.rpc("zentro_grant_registration_bonus", { p_user_id: userId });
+      if (bonusError) console.error("Registration bonus grant failed:", bonusError.message);
+    }
     const token = await issueToken({ userId, role: "customer", name });
     return json({ token, user: { id: user.id, name: user.name, phone: user.phone, role: "customer", termsAccepted: false } }, 201, { "set-cookie": sessionCookie(token) });
   }
@@ -861,6 +870,72 @@ async function handle(req: Request): Promise<Response> {
     return json({ ok: true });
   }
 
+  if (method === "GET" && route === "/admin/gift-codes") {
+    const { data, error } = await db.from("gift_codes")
+      .select("code,amount_etb,max_redemptions,redemption_count,status,expires_at,created_by,created_at")
+      .order("created_at", { ascending: false }).limit(500);
+    if (error) throw error;
+    return json({ giftCodes: (data || []).map((g) => ({
+      code: g.code, amountEtb: Number(g.amount_etb), maxRedemptions: g.max_redemptions,
+      redemptionCount: g.redemption_count, status: g.status, expiresAt: g.expires_at,
+      createdBy: g.created_by, createdAt: g.created_at
+    })) });
+  }
+
+  if (method === "POST" && route === "/admin/gift-codes") {
+    const body = await req.json().catch(() => ({}));
+    const amountEtb = Number(body.amountEtb);
+    const maxRedemptions = Number(body.maxRedemptions ?? 1);
+    const expiresAt = body.expiresAt ? new Date(body.expiresAt) : null;
+    if (!Number.isFinite(amountEtb) || amountEtb <= 0 || amountEtb > 1000000 ||
+        Math.abs(amountEtb * 100 - Math.round(amountEtb * 100)) > 0.000001) {
+      return json({ error: "Gift code amount must be positive and use at most 2 decimal places." }, 400);
+    }
+    if (!Number.isInteger(maxRedemptions) || maxRedemptions < 1 || maxRedemptions > 10000) {
+      return json({ error: "Maximum redemptions must be from 1 to 10,000." }, 400);
+    }
+    if (body.expiresAt && (!expiresAt || !Number.isFinite(expiresAt.getTime()) || expiresAt.getTime() <= Date.now())) {
+      return json({ error: "Gift code expiry must be a valid future date." }, 400);
+    }
+    let code = "";
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const candidate = "ZT-" + randomHex(6).toUpperCase();
+      const { data: existing, error: lookupError } = await db.from("gift_codes").select("code").eq("code", candidate).maybeSingle();
+      if (lookupError) throw lookupError;
+      if (!existing) { code = candidate; break; }
+    }
+    if (!code) return json({ error: "Unable to generate a unique gift code. Retry." }, 503);
+    const { error } = await db.from("gift_codes").insert({
+      code, amount_etb: amountEtb, max_redemptions: maxRedemptions,
+      redemption_count: 0, status: "Active", expires_at: expiresAt?.toISOString() ?? null,
+      created_by: adminUsername()
+    });
+    if (error) throw error;
+    const { error: auditError } = await db.from("audit_logs").insert({
+      id: "aud-" + crypto.randomUUID().slice(0, 12), actor: adminUsername(),
+      action: "Gift code created", target: code,
+      details: amountEtb + " ETB; max redemptions " + maxRedemptions
+    });
+    if (auditError) throw auditError;
+    return json({ ok: true, giftCode: { code, amountEtb, maxRedemptions, redemptionCount: 0, status: "Active", expiresAt: expiresAt?.toISOString() ?? null } }, 201);
+  }
+
+  const giftCodeRevokeMatch = route.match(/^\/admin\/gift-codes\/([^/]+)\/revoke$/);
+  if (method === "POST" && giftCodeRevokeMatch) {
+    const code = decodeURIComponent(giftCodeRevokeMatch[1]).toUpperCase();
+    const { data, error } = await db.from("gift_codes").update({ status: "Revoked" })
+      .eq("code", code).eq("status", "Active")
+      .select("code").maybeSingle();
+    if (error) throw error;
+    if (!data) return json({ error: "Active gift code not found." }, 404);
+    const { error: auditError } = await db.from("audit_logs").insert({
+      id: "aud-" + crypto.randomUUID().slice(0, 12), actor: adminUsername(),
+      action: "Gift code revoked", target: code, details: "Revoked by Admin"
+    });
+    if (auditError) throw auditError;
+    return json({ ok: true, code });
+  }
+
   if (method === "GET" && route === "/admin/feedback") {
     const [feedback, customers] = await Promise.all([
       db.from("feedback_messages").select("*").order("created_at", { ascending: false }).limit(500),
@@ -996,7 +1071,12 @@ async function handle(req: Request): Promise<Response> {
     const numericMap: Record<string, string> = {
       withdrawalStartHour: "withdrawal_start_hour", withdrawalEndHour: "withdrawal_end_hour",
       minWithdrawalEtb: "min_withdrawal_etb", minRechargeEtb: "min_recharge_etb",
-      withdrawalFeePercent: "withdrawal_fee_percent"
+      withdrawalFeePercent: "withdrawal_fee_percent",
+      registrationBonusEtb: "registration_bonus_etb",
+      dailyCheckInEtb: "daily_check_in_etb",
+      level1CommissionPercent: "level1_commission_percent",
+      level2CommissionPercent: "level2_commission_percent",
+      level3CommissionPercent: "level3_commission_percent"
     };
     for (const [key, column] of Object.entries(numericMap)) {
       if (body[key] === undefined) continue;
@@ -1005,7 +1085,18 @@ async function handle(req: Request): Promise<Response> {
       if ((key === "withdrawalStartHour" || key === "withdrawalEndHour") && (!Number.isInteger(value) || value > 23)) return json({ error: "Withdrawal hours must be whole numbers from 0 to 23." }, 400);
       if ((key === "minWithdrawalEtb" || key === "minRechargeEtb") && value <= 0) return json({ error: "Minimum deposit and withdrawal amounts must be positive." }, 400);
       if (key === "withdrawalFeePercent" && value >= 100) return json({ error: "Withdrawal fee must be below 100%." }, 400);
+      if (key.endsWith("CommissionPercent") && value > 100) return json({ error: "Commission percentages must be at most 100%." }, 400);
+      if ((key === "registrationBonusEtb" || key === "dailyCheckInEtb") && value > 100000) return json({ error: "Reward amounts exceed the allowed limit." }, 400);
       row[column] = value;
+    }
+    if (body.commissionBase !== undefined) {
+      if (body.commissionBase !== "none" && body.commissionBase !== "verified_deposit") {
+        return json({ error: "Choose a supported commission basis." }, 400);
+      }
+      if (body.commissionBase === "verified_deposit" && !TEAM_COMMISSION_RELEASED) {
+        return json({ error: "Team commission is not released yet." }, 503);
+      }
+      row.commission_base = body.commissionBase;
     }
     if (body.enforceWithdrawalHours !== undefined) {
       if (typeof body.enforceWithdrawalHours !== "boolean") return json({ error: "Invalid withdrawal schedule setting." }, 400);
@@ -1115,9 +1206,33 @@ async function handle(req: Request): Promise<Response> {
     }
   }
 
-  // Gift-code and check-in reward credits remain behind their separate release gate.
-  if (route === "/me/check-in" || route === "/gift-code") {
-    return json({ error: "This service is not available." }, 503);
+  if (method === "POST" && route === "/me/check-in") {
+    if (!REWARD_CLAIMS_RELEASED) return json({ error: "Daily check-in is not released yet." }, 503);
+    const auth = await getAuth(req);
+    if (!auth) return json({ error: "Authentication required." }, 401);
+    if (auth.role !== "customer") return json({ error: "Customer account required." }, 403);
+    const settings = await getPaymentSettings();
+    if (settings.dailyCheckInEtb <= 0) return json({ error: "Daily check-in reward is not enabled." }, 503);
+    const { data, error } = await db.rpc("zentro_claim_daily_checkin", {
+      p_user_id: auth.userId, p_reward: settings.dailyCheckInEtb
+    });
+    if (error) return json({ error: error.message }, 400);
+    return json(data);
+  }
+
+  if (method === "POST" && route === "/gift-code") {
+    if (!REWARD_CLAIMS_RELEASED) return json({ error: "Gift code redemption is not released yet." }, 503);
+    const auth = await getAuth(req);
+    if (!auth) return json({ error: "Authentication required." }, 401);
+    if (auth.role !== "customer") return json({ error: "Customer account required." }, 403);
+    const body = await req.json().catch(() => ({}));
+    const code = typeof body.code === "string" ? body.code.trim().toUpperCase() : "";
+    if (!/^[A-Z0-9-]{4,40}$/.test(code)) return json({ error: "Enter a valid gift code." }, 400);
+    const { data, error } = await db.rpc("zentro_redeem_gift_code", {
+      p_user_id: auth.userId, p_code: code
+    });
+    if (error) return json({ error: error.message }, 400);
+    return json({ ...data, message: "Gift code successfully redeemed." });
   }
 
   const uploadMatch = route.match(/^\/uploads\/([^/]+)$/);
