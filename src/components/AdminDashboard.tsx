@@ -182,6 +182,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   // Deposit handlers
   const handleApproveDeposit = async (dep: DepositRequestItem) => {
+    if (!window.confirm(`Confirm you checked the bank statement and received ${dep.amountEtb.toLocaleString()} ETB for this deposit? Approval credits the customer's wallet.`)) return;
     try {
       await apiAdminApproveDeposit(dep.id);
       showNotice(true, `Deposit of ${dep.amountEtb.toLocaleString()} ETB approved.`);
@@ -217,6 +218,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   };
 
   const handleProcessWithdrawal = async (wd: WithdrawalRequestItem) => {
+    if (!window.confirm(`Confirm ${wd.netAmountEtb.toLocaleString()} ETB has already been sent to ${wd.customerAccountName} (${wd.customerAccountNumber})? This marks the payout completed.`)) return;
     try {
       await apiAdminProcessWithdrawal(wd.id);
       showNotice(true, 'Withdrawal marked as processed.');
@@ -707,7 +709,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     Deposit Requests
                   </h1>
                   <p className="text-xs sm:text-sm text-slate-600">
-                    Inspect payment receipts and approve or reject customer deposits
+                    Verify each receipt against the bank statement before approving or rejecting a deposit
                   </p>
                 </div>
                 <div className="flex items-center gap-1 p-1 rounded-xl bg-slate-100">
