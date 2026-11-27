@@ -1604,7 +1604,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-3">
                     <div>
                       <h2 className="font-display text-base font-bold text-slate-950">Rewards &amp; Team Commission</h2>
-                      <p className="text-[11px] text-amber-800">These values are configuration only while reward and commission release locks remain closed. They will not credit customer wallets yet.</p>
+                      <p className="text-[11px] text-amber-800">Reward credits remain separately controlled. Team commission applies only to future bank deposits after Admin enables the verified-deposit basis and saves rates.</p>
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
                       <label className="space-y-1 text-[11px] font-semibold text-slate-700">
@@ -1632,7 +1632,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <span>Commission Base</span>
                       <select value={paymentDraft.commissionBase} onChange={(e) => setPaymentDraft({ ...paymentDraft, commissionBase: e.target.value as PaymentSettings['commissionBase'] })} className="w-full min-h-[40px] rounded-xl border border-slate-200 bg-white px-3 text-xs">
                         <option value="none">Disabled</option>
-                        <option value="verified_deposit" disabled>Verified Bank Deposit (locked until E2E release)</option>
+                        <option value="verified_deposit">Verified Bank Deposit (future approved deposits only)</option>
                       </select>
                     </label>
                   </div>
