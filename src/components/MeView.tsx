@@ -186,7 +186,7 @@ export const MeView: React.FC<MeViewProps> = ({
               type="button"
               disabled={!FINANCIAL_FEATURES_ENABLED}
               onClick={() => onOpenModal({ type: 'recharge' })}
-              className="min-h-[32px] sm:min-h-[36px] px-2.5 rounded-lg sm:rounded-xl bg-blue-700 hover:bg-blue-800 text-white text-[11px] sm:text-xs font-semibold cursor-pointer transition-colors"
+              className="min-h-[32px] sm:min-h-[36px] px-2.5 rounded-lg sm:rounded-xl bg-blue-700 text-white text-[11px] sm:text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50"
             >
               Recharge
             </button>
@@ -194,7 +194,7 @@ export const MeView: React.FC<MeViewProps> = ({
               type="button"
               disabled={!FINANCIAL_FEATURES_ENABLED}
               onClick={() => onOpenModal({ type: 'withdraw' })}
-              className="min-h-[32px] sm:min-h-[36px] px-2.5 rounded-lg sm:rounded-xl border border-blue-700 bg-white hover:bg-blue-50 text-blue-800 text-[11px] sm:text-xs font-semibold cursor-pointer transition-colors"
+              className="min-h-[32px] sm:min-h-[36px] px-2.5 rounded-lg sm:rounded-xl border border-blue-700 bg-white text-blue-800 text-[11px] sm:text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50"
             >
               Withdraw
             </button>
@@ -236,7 +236,7 @@ export const MeView: React.FC<MeViewProps> = ({
       </section>
 
       {FINANCIAL_FEATURES_ENABLED && (
-      <section
+        <section
         aria-label="Daily Check-in"
         className="rounded-2xl border border-amber-200 bg-white p-4 shadow-xs space-y-3"
       >
@@ -311,7 +311,8 @@ export const MeView: React.FC<MeViewProps> = ({
             </div>
           )}
         </div>
-      </section>      )}
+      </section>
+      )}
 
       {/* Me Menu */}
       <section
