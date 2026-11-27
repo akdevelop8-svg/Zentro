@@ -128,32 +128,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const loadAllAdminData = useCallback(async () => {
     try {
-      const [
-        ov,
-        custRes,
-        depRes,
-        wdRes,
-        fbRes,
-        brdRes,
-        payRes,
-        audRes,
-      ] = await Promise.all([
+      const [ov, custRes, fbRes, brdRes, audRes, financeRes] = await Promise.all([
         apiAdminOverview(),
         apiAdminCustomers(customerQuery, statusFilter),
-        apiAdminDeposits(),
-        apiAdminWithdrawals(),
         apiAdminFeedback(),
         apiAdminBroadcasts(),
-        apiAdminGetPaymentSettings(),
         apiAdminAuditLogs(),
+        FINANCIAL_FEATURES_ENABLED
+          ? Promise.all([apiAdminDeposits(), apiAdminWithdrawals(), apiAdminGetPaymentSettings()])
+          : Promise.resolve(null),
       ]);
       setOverview(ov);
       setCustomers(custRes.customers);
-      setDeposits(depRes.deposits);
-      setWithdrawals(wdRes.withdrawals);
+      setDeposits(financeRes?.[0].deposits ?? []);
+      setWithdrawals(financeRes?.[1].withdrawals ?? []);
       setFeedbackList(fbRes.feedback);
       setBroadcasts(brdRes.broadcasts);
-      setPaymentDraft(payRes);
+      setPaymentDraft(financeRes?.[2] ?? null);
       setAuditLogs(audRes.auditLogs);
     } catch (err) {
       showNotice(false, (err as Error).message);
@@ -503,18 +494,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     {overview?.totalCustomers ?? 0}
                   </p>
                 </div>
-                <div className="rounded-2xl border border-amber-200 bg-white p-4">
-                  <p className="text-xs text-slate-600">Pending Deposits</p>
-                  <p className="font-mono tabular-nums text-2xl font-bold text-blue-800 mt-1">
-                    {overview?.pendingDeposits ?? 0}
-                  </p>
-                </div>
-                <div className="rounded-2xl border border-amber-200 bg-white p-4">
-                  <p className="text-xs text-slate-600">Pending Withdrawals</p>
-                  <p className="font-mono tabular-nums text-2xl font-bold text-amber-600 mt-1">
-                    {overview?.pendingWithdrawals ?? 0}
-                  </p>
-                </div>
+                {FINANCIAL_FEATURES_ENABLED && (
+                  <>
+                    <div className="rounded-2xl border border-amber-200 bg-white p-4">
+                      <p className="text-xs text-slate-600">Pending Deposits</p>
+                      <p className="font-mono tabular-nums text-2xl font-bold text-blue-800 mt-1">
+                        {overview?.pendingDeposits ?? 0}
+                      </p>
+                    </div>
+                    <div className="rounded-2xl border border-amber-200 bg-white p-4">
+                      <p className="text-xs text-slate-600">Pending Withdrawals</p>
+                      <p className="font-mono tabular-nums text-2xl font-bold text-amber-600 mt-1">
+                        {overview?.pendingWithdrawals ?? 0}
+                      </p>
+                    </div>
+                  </>
+                )}
                 <div className="rounded-2xl border border-slate-200 bg-white p-4">
                   <p className="text-xs text-slate-600">Unread Feedback</p>
                   <p className="font-mono tabular-nums text-2xl font-bold text-slate-950 mt-1">
@@ -524,41 +519,44 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="rounded-2xl border border-slate-200 bg-white p-5 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <h2 className="font-display text-base font-bold text-slate-950">
-                      Pending Requests
-                    </h2>
-                    <button
-                      type="button"
-                      onClick={() => setSection('deposits')}
-                      className="text-xs font-semibold text-blue-700 hover:underline cursor-pointer"
-                    >
-                      Review deposits
-                    </button>
+                {FINANCIAL_FEATURES_ENABLED && (
+                  <div className="rounded-2xl border border-slate-200 bg-white p-5 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h2 className="font-display text-base font-bold text-slate-950">
+                        Pending Requests
+                      </h2>
+                      <button
+                        type="button"
+                        onClick={() => setSection('deposits')}
+                        className="text-xs font-semibold text-blue-700 hover:underline cursor-pointer"
+                      >
+                        Review deposits
+                      </button>
+                    </div>
+                    <div className="space-y-2 text-xs">
+                      {deposits
+                        .filter((d) => d.status === 'Pending')
+                        .slice(0, 3)
+                        .map((d) => (
+                          <div
+                            key={d.id}
+                            className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 flex items-center justify-between"
+                          >
+                            <span>
+                              <strong>{d.customerName}</strong> ({d.customerPhone})
+                            </span>
+                            <span className="font-mono font-bold text-blue-800">
+                              +{d.amountEtb.toLocaleString()} ETB
+                            </span>
+                          </div>
+                        ))}
+                      {deposits.filter((d) => d.status === 'Pending').length === 0 && (
+                        <p className="text-slate-500">No pending deposit requests.</p>
+                      )}
+                    </div>
                   </div>
-                  <div className="space-y-2 text-xs">
-                    {deposits
-                      .filter((d) => d.status === 'Pending')
-                      .slice(0, 3)
-                      .map((d) => (
-                        <div
-                          key={d.id}
-                          className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 flex items-center justify-between"
-                        >
-                          <span>
-                            <strong>{d.customerName}</strong> ({d.customerPhone})
-                          </span>
-                          <span className="font-mono font-bold text-blue-800">
-                            +{d.amountEtb.toLocaleString()} ETB
-                          </span>
-                        </div>
-                      ))}
-                    {deposits.filter((d) => d.status === 'Pending').length === 0 && (
-                      <p className="text-slate-500">No pending deposit requests.</p>
-                    )}
-                  </div>
-                </div>
+  
+                  )}
 
                 <div className="rounded-2xl border border-slate-200 bg-white p-5 space-y-3">
                   <div className="flex items-center justify-between">
