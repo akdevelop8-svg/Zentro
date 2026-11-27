@@ -1601,6 +1601,42 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <span>Enforce withdrawal time window on customer withdrawal requests</span>
                   </label>
 
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-3">
+                    <div>
+                      <h2 className="font-display text-base font-bold text-slate-950">Rewards &amp; Team Commission</h2>
+                      <p className="text-[11px] text-amber-800">These values are configuration only while reward and commission release locks remain closed. They will not credit customer wallets yet.</p>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+                      <label className="space-y-1 text-[11px] font-semibold text-slate-700">
+                        <span>Registration Bonus (ETB)</span>
+                        <input type="number" min="0" max="100000" step="0.01" value={paymentDraft.registrationBonusEtb} onChange={(e) => setPaymentDraft({ ...paymentDraft, registrationBonusEtb: Number(e.target.value) || 0 })} className="w-full min-h-[40px] rounded-xl border border-slate-200 bg-white px-3 font-mono text-sm" />
+                      </label>
+                      <label className="space-y-1 text-[11px] font-semibold text-slate-700">
+                        <span>Daily Check-in (ETB)</span>
+                        <input type="number" min="0" max="100000" step="0.01" value={paymentDraft.dailyCheckInEtb} onChange={(e) => setPaymentDraft({ ...paymentDraft, dailyCheckInEtb: Number(e.target.value) || 0 })} className="w-full min-h-[40px] rounded-xl border border-slate-200 bg-white px-3 font-mono text-sm" />
+                      </label>
+                      <label className="space-y-1 text-[11px] font-semibold text-slate-700">
+                        <span>Level 1 Commission (%)</span>
+                        <input type="number" min="0" max="100" step="0.01" value={paymentDraft.level1CommissionPercent} onChange={(e) => setPaymentDraft({ ...paymentDraft, level1CommissionPercent: Number(e.target.value) || 0 })} className="w-full min-h-[40px] rounded-xl border border-slate-200 bg-white px-3 font-mono text-sm" />
+                      </label>
+                      <label className="space-y-1 text-[11px] font-semibold text-slate-700">
+                        <span>Level 2 Commission (%)</span>
+                        <input type="number" min="0" max="100" step="0.01" value={paymentDraft.level2CommissionPercent} onChange={(e) => setPaymentDraft({ ...paymentDraft, level2CommissionPercent: Number(e.target.value) || 0 })} className="w-full min-h-[40px] rounded-xl border border-slate-200 bg-white px-3 font-mono text-sm" />
+                      </label>
+                      <label className="space-y-1 text-[11px] font-semibold text-slate-700">
+                        <span>Level 3 Commission (%)</span>
+                        <input type="number" min="0" max="100" step="0.01" value={paymentDraft.level3CommissionPercent} onChange={(e) => setPaymentDraft({ ...paymentDraft, level3CommissionPercent: Number(e.target.value) || 0 })} className="w-full min-h-[40px] rounded-xl border border-slate-200 bg-white px-3 font-mono text-sm" />
+                      </label>
+                    </div>
+                    <label className="block max-w-sm space-y-1 text-[11px] font-semibold text-slate-700">
+                      <span>Commission Base</span>
+                      <select value={paymentDraft.commissionBase} onChange={(e) => setPaymentDraft({ ...paymentDraft, commissionBase: e.target.value as PaymentSettings['commissionBase'] })} className="w-full min-h-[40px] rounded-xl border border-slate-200 bg-white px-3 text-xs">
+                        <option value="none">Disabled</option>
+                        <option value="verified_deposit" disabled>Verified Bank Deposit (locked until E2E release)</option>
+                      </select>
+                    </label>
+                  </div>
+
                   <button
                     type="submit"
                     className="min-h-[44px] px-5 rounded-xl bg-blue-700 hover:bg-blue-800 text-white text-xs font-semibold inline-flex items-center gap-2 cursor-pointer"
