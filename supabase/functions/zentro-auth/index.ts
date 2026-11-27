@@ -29,6 +29,9 @@ const WELFARE_PLANS = [
   { id: "welfare-5", name: "Plan 5", investmentEtb: 25000, dailyAmountEtb: 7000, durationDays: 7 },
 ];
 
+// Hard release lock: plan transactions stay disabled until isolated staging validation is complete.
+const PLAN_ACTIONS_RELEASED = false;
+
 function json(data: unknown, status = 200, headers: HeadersInit = {}) {
   return new Response(JSON.stringify(data), {
     status,
@@ -1038,7 +1041,7 @@ async function handle(req: Request): Promise<Response> {
     (method === "POST" && new RegExp("^/welfare/[^/]+/(claim|release)$").test(route));
 
   if (isPlanAction) {
-    if (Deno.env.get("ZENTRO_PLAN_FEATURES_ENABLED") !== "true") {
+    if (!PLAN_ACTIONS_RELEASED || Deno.env.get("ZENTRO_PLAN_FEATURES_ENABLED") !== "true") {
       return json({ error: "Plan service is not available." }, 503);
     }
 
