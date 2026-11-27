@@ -109,17 +109,27 @@ test('referral URL and phone normalization helpers work accurately', () => {
   assert.equal(normalizePhone('+251911223344'), '251911223344');
 });
 
-test('daily check-in 24-hour gating locks claim for 24h and unlocks after 24h', () => {
+test('first daily check-in unlocks 24 hours after registration; later claims unlock 24 hours after the last claim', () => {
   const t0 = 1_700_000_000_000;
-  const before = getCheckInStatus(null, t0);
-  assert.equal(before.canClaim, true);
+  const registeredAt = new Date(t0).toISOString();
 
-  const locked = getCheckInStatus(t0, t0 + 3600_000);
-  assert.equal(locked.canClaim, false);
-  assert.equal(locked.formattedRemaining, '23:00:00');
+  const immediatelyAfterRegistration = getCheckInStatus(null, t0, registeredAt);
+  assert.equal(immediatelyAfterRegistration.canClaim, false);
+  assert.equal(immediatelyAfterRegistration.formattedRemaining, '24:00:00');
 
-  const after24h = getCheckInStatus(t0, t0 + 24 * 3600_000);
-  assert.equal(after24h.canClaim, true);
+  const oneHourAfterRegistration = getCheckInStatus(null, t0 + 3600_000, registeredAt);
+  assert.equal(oneHourAfterRegistration.canClaim, false);
+  assert.equal(oneHourAfterRegistration.formattedRemaining, '23:00:00');
+
+  const firstClaimWindow = getCheckInStatus(null, t0 + 24 * 3600_000, registeredAt);
+  assert.equal(firstClaimWindow.canClaim, true);
+
+  const oneHourAfterClaim = getCheckInStatus(t0 + 24 * 3600_000, t0 + 25 * 3600_000, registeredAt);
+  assert.equal(oneHourAfterClaim.canClaim, false);
+  assert.equal(oneHourAfterClaim.formattedRemaining, '23:00:00');
+
+  const nextClaimWindow = getCheckInStatus(t0 + 24 * 3600_000, t0 + 48 * 3600_000, registeredAt);
+  assert.equal(nextClaimWindow.canClaim, true);
 });
 
 test('validateBankAccount enforces CBE name and 8-18 digit number', () => {
