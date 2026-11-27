@@ -40,7 +40,8 @@ import {
   apiAdminUpdatePaymentSettings,
   apiAdminWithdrawals,
   uploadImageUrl,
-  FINANCIAL_FEATURES_ENABLED,
+  BANK_TRANSFER_FEATURES_ENABLED,
+  BANK_TRANSFER_FEATURES_ENABLED,
 } from '../services/api';
 import {
   AdminCustomerDetailPayload,
@@ -79,7 +80,7 @@ const ADMIN_NAV: {
 ];
 
 const ACTIVE_ADMIN_NAV = ADMIN_NAV.filter(({ id }) =>
-  FINANCIAL_FEATURES_ENABLED || !['deposits', 'withdrawals', 'payment_settings'].includes(id)
+  BANK_TRANSFER_FEATURES_ENABLED || !['deposits', 'withdrawals', 'payment_settings'].includes(id)
 );
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
@@ -134,7 +135,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         apiAdminFeedback(),
         apiAdminBroadcasts(),
         apiAdminAuditLogs(),
-        FINANCIAL_FEATURES_ENABLED
+        BANK_TRANSFER_FEATURES_ENABLED
           ? Promise.all([apiAdminDeposits(), apiAdminWithdrawals(), apiAdminGetPaymentSettings()])
           : Promise.resolve(null),
       ]);
@@ -494,7 +495,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     {overview?.totalCustomers ?? 0}
                   </p>
                 </div>
-                {FINANCIAL_FEATURES_ENABLED && (
+                {BANK_TRANSFER_FEATURES_ENABLED && (
                   <>
                     <div className="rounded-2xl border border-amber-200 bg-white p-4">
                       <p className="text-xs text-slate-600">Pending Deposits</p>
@@ -519,7 +520,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {FINANCIAL_FEATURES_ENABLED && (
+                {BANK_TRANSFER_FEATURES_ENABLED && (
                   <div className="rounded-2xl border border-slate-200 bg-white p-5 space-y-3">
                     <div className="flex items-center justify-between">
                       <h2 className="font-display text-base font-bold text-slate-950">
@@ -598,7 +599,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     Search customers by phone or name, view complete profiles, and manage account status
                   </p>
                 </div>
-                {!FINANCIAL_FEATURES_ENABLED && <span className="text-[11px] font-medium text-amber-800">Financial controls paused until release</span>}
+                {!BANK_TRANSFER_FEATURES_ENABLED && <span className="text-[11px] font-medium text-amber-800">Financial controls paused until release</span>}
               </div>
 
               <div className="flex flex-wrap items-center justify-between gap-3">
@@ -699,7 +700,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           )}
 
           {/* 3. DEPOSIT REQUESTS */}
-          {FINANCIAL_FEATURES_ENABLED && section === 'deposits' && (
+          {BANK_TRANSFER_FEATURES_ENABLED && section === 'deposits' && (
             <section className="space-y-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
@@ -826,7 +827,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           )}
 
           {/* 4. WITHDRAWAL REQUESTS */}
-          {FINANCIAL_FEATURES_ENABLED && section === 'withdrawals' && (
+          {BANK_TRANSFER_FEATURES_ENABLED && section === 'withdrawals' && (
             <section className="space-y-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
@@ -1246,7 +1247,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           )}
 
           {/* 7. PAYMENT SETTINGS */}
-          {FINANCIAL_FEATURES_ENABLED && section === 'payment_settings' && paymentDraft && (
+          {BANK_TRANSFER_FEATURES_ENABLED && section === 'payment_settings' && paymentDraft && (
             <section className="space-y-4">
               <div>
                 <h1 className="font-display text-2xl font-bold text-slate-950">
