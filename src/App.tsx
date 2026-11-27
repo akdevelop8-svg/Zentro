@@ -310,7 +310,6 @@ export default function App() {
         purchasedCount={totalPurchasedCount}
         settings={customerProfile.paymentSettings}
         notifications={customerProfile.notifications}
-        feedbackMessages={customerProfile.feedbackMessages}
         onClose={() => setActiveModal(null)}
         onRefreshMe={refreshCustomerProfile}
       />
