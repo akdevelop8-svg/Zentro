@@ -600,7 +600,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     Search customers by phone or name, view complete profiles, and manage account status
                   </p>
                 </div>
-                {!BANK_TRANSFER_FEATURES_ENABLED && <span className="text-[11px] font-medium text-amber-800">Financial controls paused until release</span>}
               </div>
 
               <div className="flex flex-wrap items-center justify-between gap-3">
