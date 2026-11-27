@@ -14,6 +14,9 @@ import {
   WithdrawalRequestItem,
 } from '../types/zentro';
 
+// Financial actions stay disabled until the owner explicitly authorizes release.
+export const FINANCIAL_FEATURES_ENABLED = false;
+
 // Auth Bearer token stored strictly in JS memory (never localStorage/sessionStorage)
 let inMemoryToken: string | null = null;
 
