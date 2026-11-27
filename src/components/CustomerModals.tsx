@@ -23,6 +23,7 @@ import {
   apiVerifyGiftCode,
   uploadImageUrl,
   FINANCIAL_FEATURES_ENABLED,
+  GIFT_CODE_FEATURES_ENABLED,
   BANK_TRANSFER_FEATURES_ENABLED,
 } from '../services/api';
 import {
@@ -135,8 +136,13 @@ export const CustomerModals: React.FC<CustomerModalsProps> = ({
   if (!modal) return null;
 
   const isBankTransferModal = modal.type === 'recharge' || modal.type === 'withdraw';
-  const isOtherFinancialModal = ['giftcode', 'plan', 'welfare'].includes(modal.type);
-  if ((!BANK_TRANSFER_FEATURES_ENABLED && isBankTransferModal) || (!FINANCIAL_FEATURES_ENABLED && isOtherFinancialModal)) {
+  const isGiftCodeModal = modal.type === 'giftcode';
+  const isPlanModal = modal.type === 'plan' || modal.type === 'welfare';
+  if (
+    (!BANK_TRANSFER_FEATURES_ENABLED && isBankTransferModal) ||
+    (!GIFT_CODE_FEATURES_ENABLED && isGiftCodeModal) ||
+    (!FINANCIAL_FEATURES_ENABLED && isPlanModal)
+  ) {
     return null;
   }
 
