@@ -17,6 +17,7 @@ import {
   Users,
   Wallet,
 } from 'lucide-react';
+import { FINANCIAL_FEATURES_ENABLED } from '../services/api';
 import {
   ActiveModal,
   BankAccountInfo,
@@ -183,6 +184,7 @@ export const MeView: React.FC<MeViewProps> = ({
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-1.5 shrink-0">
             <button
               type="button"
+              disabled={!FINANCIAL_FEATURES_ENABLED}
               onClick={() => onOpenModal({ type: 'recharge' })}
               className="min-h-[32px] sm:min-h-[36px] px-2.5 rounded-lg sm:rounded-xl bg-blue-700 hover:bg-blue-800 text-white text-[11px] sm:text-xs font-semibold cursor-pointer transition-colors"
             >
@@ -190,6 +192,7 @@ export const MeView: React.FC<MeViewProps> = ({
             </button>
             <button
               type="button"
+              disabled={!FINANCIAL_FEATURES_ENABLED}
               onClick={() => onOpenModal({ type: 'withdraw' })}
               className="min-h-[32px] sm:min-h-[36px] px-2.5 rounded-lg sm:rounded-xl border border-blue-700 bg-white hover:bg-blue-50 text-blue-800 text-[11px] sm:text-xs font-semibold cursor-pointer transition-colors"
             >
@@ -232,7 +235,7 @@ export const MeView: React.FC<MeViewProps> = ({
         </div>
       </section>
 
-      {/* Daily Check-in Card: Button disappears after claim and ONLY shows 24h countdown */}
+      {FINANCIAL_FEATURES_ENABLED && (
       <section
         aria-label="Daily Check-in"
         className="rounded-2xl border border-amber-200 bg-white p-4 shadow-xs space-y-3"
@@ -308,7 +311,7 @@ export const MeView: React.FC<MeViewProps> = ({
             </div>
           )}
         </div>
-      </section>
+      </section>      )}
 
       {/* Me Menu */}
       <section
@@ -366,6 +369,8 @@ export const MeView: React.FC<MeViewProps> = ({
           </div>
         )}
 
+        {FINANCIAL_FEATURES_ENABLED && (
+          <>
         {/* Bank Account Management */}
         <button
           type="button"
@@ -475,6 +480,9 @@ export const MeView: React.FC<MeViewProps> = ({
               )}
             </div>
           </form>
+        )}
+
+          </>
         )}
 
         {/* Team Shortcut */}
