@@ -466,6 +466,8 @@ export const CustomerModals: React.FC<CustomerModalsProps> = ({
                     Done
                   </button>
                 </div>
+              ) : enabledWithdrawalMethods.length === 0 ? (
+                <p className="text-xs text-red-700">No withdrawal bank methods are currently enabled by Admin.</p>
               ) : (
                 <form onSubmit={handleWithdrawalSubmit} className="space-y-3.5" noValidate>
                   <div className="rounded-2xl border border-amber-200 bg-amber-50/70 p-3.5 text-xs space-y-1">
