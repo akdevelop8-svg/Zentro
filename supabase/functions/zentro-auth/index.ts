@@ -39,8 +39,7 @@ const TEAM_COMMISSION_RELEASED = true;
 // Financial/admin mutations are enabled only on the release-preflight Preview host.
 // The production domains continue to fail closed until Preview acceptance is complete.
 const PREVIEW_ALLOWED_HOSTS = new Set([
-  "zentro-git-release-preflight-akdevelop8-svg.vercel.app",
-  "zentro-pqsk35zb9-akdevelop8-svg.vercel.app"
+  "zentro-git-release-preflight-akdevelop8-svg.vercel.app"
 ]);
 function isAllowedPreviewRequest(req: Request): boolean {
   const origin = req.headers.get("origin");
