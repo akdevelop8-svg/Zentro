@@ -282,15 +282,14 @@ export function getWelfareClaimState(
   const isMatured = nowMs >= enrollment.maturesAtMs;
   const hasRemainingDays = enrollment.claimedDays < enrollment.durationDays;
 
-  let nextClaimRemainingSeconds = 0;
-  let cooldownPassed = true;
-  if (enrollment.lastClaimAtMs) {
-    const elapsed = Math.max(0, nowMs - enrollment.lastClaimAtMs);
-    if (elapsed < DAY_MS) {
-      cooldownPassed = false;
-      nextClaimRemainingSeconds = Math.ceil((DAY_MS - elapsed) / 1000);
-    }
-  }
+  // The first Welfare claim also has to wait 24 hours from activation.
+  // Later claims wait 24 hours from the previous successful claim.
+  const claimAnchorMs = enrollment.lastClaimAtMs ?? enrollment.startedAtMs;
+  const elapsedSinceClaimAnchor = Math.max(0, nowMs - claimAnchorMs);
+  const cooldownPassed = elapsedSinceClaimAnchor >= DAY_MS;
+  const nextClaimRemainingSeconds = cooldownPassed
+    ? 0
+    : Math.ceil((DAY_MS - elapsedSinceClaimAnchor) / 1000);
 
   const isActive = enrollment.status === 'Active';
   const canClaimDaily = isActive && hasRemainingDays && cooldownPassed;
