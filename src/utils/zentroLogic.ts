@@ -229,28 +229,38 @@ export function extractReferralCodeFromSearch(search: string): string {
 
 export function getCheckInStatus(
   lastCheckInAt: number | null,
-  nowMs: number
+  nowMs: number,
+  registeredAt: string | number
 ): {
   canClaim: boolean;
   remainingSeconds: number;
   formattedRemaining: string;
 } {
-  if (!lastCheckInAt) {
+  // The first check-in is available 24 hours after registration.
+  // Later check-ins are available 24 hours after the previous successful claim.
+  const registeredAtMs =
+    typeof registeredAt === 'number' ? registeredAt : Date.parse(registeredAt);
+  const nextClaimAtMs =
+    lastCheckInAt !== null
+      ? lastCheckInAt + DAY_MS
+      : Number.isFinite(registeredAtMs)
+        ? registeredAtMs + DAY_MS
+        : Number.POSITIVE_INFINITY;
+  const remainingMs = Math.max(0, nextClaimAtMs - nowMs);
+
+  if (remainingMs === 0) {
     return {
       canClaim: true,
       remainingSeconds: 0,
       formattedRemaining: '00:00:00',
     };
   }
-  const elapsedMs = Math.max(0, nowMs - lastCheckInAt);
-  if (elapsedMs >= DAY_MS) {
-    return {
-      canClaim: true,
-      remainingSeconds: 0,
-      formattedRemaining: '00:00:00',
-    };
-  }
-  const remainingSeconds = Math.ceil((DAY_MS - elapsedMs) / 1000);
+
+  // If the registration timestamp is unavailable, fail closed rather than
+  // allowing an immediate first claim.
+  const remainingSeconds = Number.isFinite(remainingMs)
+    ? Math.ceil(remainingMs / 1000)
+    : 24 * 60 * 60;
   return {
     canClaim: false,
     remainingSeconds,
