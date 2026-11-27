@@ -366,7 +366,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                         onClick={() => onOpenModal({ type: 'plan', plan })}
                         className="w-full min-h-[40px] sm:min-h-[44px] rounded-xl bg-blue-700 text-white text-xs sm:text-sm font-semibold transition-colors cursor-not-allowed opacity-50 disabled:cursor-not-allowed"
                       >
-                        Buy Plan
+                        {FINANCIAL_FEATURES_ENABLED ? 'Buy Plan' : 'Available after release'}
                       </button>
                     </div>
                   </article>
@@ -476,7 +476,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                         onClick={() => onOpenModal({ type: 'welfare', plan })}
                         className="w-full min-h-[40px] sm:min-h-[44px] rounded-xl border border-amber-400 bg-gradient-to-r from-blue-700 to-blue-800 text-white text-xs sm:text-sm font-semibold transition-colors cursor-not-allowed opacity-50 disabled:cursor-not-allowed"
                       >
-                        Buy Plan
+                        {FINANCIAL_FEATURES_ENABLED ? 'Buy Plan' : 'Available after release'}
                       </button>
                     </div>
                   </article>
