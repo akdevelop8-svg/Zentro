@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   buildReferralLink,
+  calculateTotalProfitEtb,
   calculateWithdrawalPreview,
   canRequestWithdrawal,
   extractReferralCodeFromSearch,
@@ -45,6 +46,20 @@ test('WELFARE_PLANS match exact 5-plan specifications', () => {
       ['Plan 5', 25000, 7000, 7],
     ]
   );
+});
+
+test('total profit uses daily income multiplied by plan duration for every plan', () => {
+  assert.deepEqual(
+    VIP_PLANS.map((plan) => calculateTotalProfitEtb(plan.dailyIncomeEtb, plan.cycleDays)),
+    [3900, 9000, 18000, 27000, 60000, 150000]
+  );
+  assert.deepEqual(
+    WELFARE_PLANS.map((plan) => calculateTotalProfitEtb(plan.dailyAmountEtb, plan.durationDays)),
+    [5000, 7500, 15000, 28000, 49000]
+  );
+  assert.equal(calculateTotalProfitEtb(Number.NaN, 30), 0);
+  assert.equal(calculateTotalProfitEtb(100, 2.5), 0);
+  assert.equal(calculateTotalProfitEtb(-100, 30), 0);
 });
 
 test('formatMultiDayCountdown formats 5-day and 7-day remaining durations accurately', () => {
