@@ -364,7 +364,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                         type="button"
                         disabled={!FINANCIAL_FEATURES_ENABLED}
                         onClick={() => onOpenModal({ type: 'plan', plan })}
-                        className="w-full min-h-[40px] sm:min-h-[44px] rounded-xl bg-blue-700 text-white text-xs sm:text-sm font-semibold transition-colors cursor-not-allowed opacity-50 disabled:cursor-not-allowed"
+                        className={`w-full min-h-[40px] sm:min-h-[44px] rounded-xl bg-blue-700 text-white text-xs sm:text-sm font-semibold transition-colors ${FINANCIAL_FEATURES_ENABLED ? 'cursor-pointer hover:bg-blue-800' : 'cursor-not-allowed opacity-50'}`}
                       >
                         Buy Plan
                       </button>
@@ -480,7 +480,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                         type="button"
                         disabled={!FINANCIAL_FEATURES_ENABLED}
                         onClick={() => onOpenModal({ type: 'welfare', plan })}
-                        className="w-full min-h-[40px] sm:min-h-[44px] rounded-xl border border-amber-400 bg-gradient-to-r from-blue-700 to-blue-800 text-white text-xs sm:text-sm font-semibold transition-colors cursor-not-allowed opacity-50 disabled:cursor-not-allowed"
+                        className={`w-full min-h-[40px] sm:min-h-[44px] rounded-xl border border-amber-400 bg-gradient-to-r from-blue-700 to-blue-800 text-white text-xs sm:text-sm font-semibold transition-colors ${FINANCIAL_FEATURES_ENABLED ? 'cursor-pointer hover:from-blue-800 hover:to-blue-900' : 'cursor-not-allowed opacity-50'}`}
                       >
                         Buy Plan
                       </button>
