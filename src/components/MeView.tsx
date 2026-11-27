@@ -29,7 +29,6 @@ import {
   WithdrawalRequestItem,
 } from '../types/zentro';
 import {
-  canRequestWithdrawal,
   getCheckInStatus,
   MAIN_ZENTRO_LOGO,
   validateBankAccount,
@@ -102,7 +101,7 @@ export const MeView: React.FC<MeViewProps> = ({
   }, [currentUser.bankAccount, defaultMethod]);
 
   const checkInStatus = getCheckInStatus(currentUser.lastCheckInAt, nowMs);
-  const meetsWithdrawalReq = canRequestWithdrawal(purchasedCount);
+  const meetsWithdrawalReq = true;
 
   const handleClaimCheckIn = async () => {
     if (checkInSubmitting || !checkInStatus.canClaim) return;
@@ -529,9 +528,7 @@ export const MeView: React.FC<MeViewProps> = ({
         {activePanel === 'withdrawals' && (
           <div className="p-4 bg-slate-50/70 space-y-2">
             <p className="text-[11px] font-medium text-slate-700">
-              {meetsWithdrawalReq
-                ? '1-plan requirement met'
-                : 'Purchase at least 1 plan before first withdrawal'}
+              Bank withdrawals use your available wallet balance.
             </p>
             {withdrawals.length === 0 ? (
               <p className="text-xs text-slate-500">No withdrawal requests yet.</p>
