@@ -11,6 +11,7 @@ import {
   Headphones,
   Info,
   Landmark,
+  Lock,
   LogOut,
   Phone,
   Receipt,
@@ -397,6 +398,34 @@ export const MeView: React.FC<MeViewProps> = ({
         </button>
 
         {activePanel === 'bank' && (
+          currentUser.bankAccount ? (
+            <div className="p-4 bg-slate-50/70 space-y-3">
+              <div className="flex items-center gap-2 text-xs font-semibold text-emerald-800">
+                <Lock className="h-4 w-4" />
+                Bank account saved and locked
+              </div>
+              <p className="text-[11px] leading-relaxed text-slate-600">
+                These details cannot be edited after the first save. Check them carefully before submitting a withdrawal.
+              </p>
+              <dl className="grid grid-cols-1 gap-2 rounded-xl border border-slate-200 bg-white p-3 text-xs">
+                <div className="flex justify-between gap-3">
+                  <dt className="text-slate-500">Bank</dt>
+                  <dd className="font-semibold text-slate-900">{currentUser.bankAccount.method}</dd>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <dt className="text-slate-500">Account name</dt>
+                  <dd className="font-semibold text-slate-900 text-right">{currentUser.bankAccount.accountName}</dd>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <dt className="text-slate-500">Account number</dt>
+                  <dd className="font-mono font-semibold text-slate-900">{currentUser.bankAccount.accountNumber}</dd>
+                </div>
+              </dl>
+              <p className="text-[11px] text-slate-500">
+                For an incorrect saved detail, contact ZENTRO support for a controlled review.
+              </p>
+            </div>
+          ) : (
           <form onSubmit={handleSaveBank} className="p-4 bg-slate-50/70 space-y-3">
             <div>
               <label
@@ -479,6 +508,7 @@ export const MeView: React.FC<MeViewProps> = ({
               )}
             </div>
           </form>
+          )
         )}
 
           </>
