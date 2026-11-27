@@ -101,7 +101,7 @@ export const MeView: React.FC<MeViewProps> = ({
     setBankMethod(currentUser.bankAccount?.method ?? defaultMethod);
   }, [currentUser.bankAccount, defaultMethod]);
 
-  const checkInStatus = getCheckInStatus(currentUser.lastCheckInAt, nowMs);
+  const checkInStatus = getCheckInStatus(currentUser.lastCheckInAt, nowMs, currentUser.registeredAt);
 
   const handleClaimCheckIn = async () => {
     if (checkInSubmitting || !checkInStatus.canClaim) return;
@@ -277,7 +277,11 @@ export const MeView: React.FC<MeViewProps> = ({
 
         {!checkInStatus.canClaim && (
           <div className="flex items-center justify-between text-xs pt-2 border-t border-slate-100">
-            <span className="text-slate-600">Next claim available in</span>
+            <span className="text-slate-600">
+              {currentUser.lastCheckInAt === null
+                ? 'First check-in available in'
+                : 'Next claim available in'}
+            </span>
             <span className="font-mono tabular-nums font-semibold text-amber-800">
               {checkInStatus.formattedRemaining}
             </span>
