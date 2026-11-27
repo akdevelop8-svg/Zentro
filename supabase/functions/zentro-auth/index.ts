@@ -262,6 +262,13 @@ async function getCustomerProfile(userId: string) {
   const { data: user, error: userError } = await db.from("users").select("*").eq("id", userId).maybeSingle();
   if (userError) throw userError;
   if (!user) return null;
+  const { error: expiryError } = await db.from("purchased_plans")
+    .update({ status: "Expired" })
+    .eq("user_id", userId)
+    .eq("status", "Active")
+    .lt("expires_at", new Date().toISOString());
+  if (expiryError) throw expiryError;
+
   const [purchasedRes, welfareRes, checkRes, depositRes, withdrawalRes, notificationRes, feedbackRes, activityRes, broadcastsRes, teamRes, allPlansRes] = await Promise.all([
     db.from("purchased_plans").select("*").eq("user_id", userId).order("purchased_at", { ascending: false }),
     db.from("welfare_enrollments").select("*").eq("user_id", userId).order("started_at", { ascending: false }),
@@ -301,7 +308,13 @@ async function getCustomerProfile(userId: string) {
       termsAccepted: Boolean(user.terms_accepted), registeredAt: user.created_at,
       bankAccount: user.bank_account_number ? { accountName: user.bank_account_name || "", accountNumber: user.bank_account_number, method: user.bank_method || "CBE" } : undefined,
     },
-    purchasedPlans: (purchasedRes.data || []).map((p) => ({ id: p.id, planId: p.plan_id, tier: p.tier, investmentEtb: Number(p.investment_etb), dailyIncomeEtb: Number(p.daily_income_etb), cycleDays: p.cycle_days, purchaseDate: p.purchased_at, nextCycleAt: Number(p.next_cycle_at), status: p.status })),
+    purchasedPlans: (purchasedRes.data || []).map((p) => ({
+      id: p.id, planId: p.plan_id, tier: p.tier,
+      investmentEtb: Number(p.investment_etb), dailyIncomeEtb: Number(p.daily_income_etb),
+      cycleDays: p.cycle_days, claimedDays: Number(p.claimed_days || 0),
+      purchaseDate: p.purchased_at, nextCycleAt: Number(p.next_cycle_at),
+      expiresAtMs: new Date(p.expires_at).getTime(), status: p.status
+    })),
     welfareEnrollments: (welfareRes.data || []).map((w) => ({ id: w.id, planId: w.plan_id, planName: w.plan_name, investmentEtb: Number(w.investment_etb), dailyAmountEtb: Number(w.daily_amount_etb), durationDays: w.duration_days, claimedDays: w.claimed_days, accumulatedEtb: Number(w.accumulated_etb), startedAt: w.started_at, startedAtMs: Number(w.started_at_ms), maturesAtMs: Number(w.matures_at_ms), lastClaimAtMs: w.last_claim_at_ms === null ? null : Number(w.last_claim_at_ms), status: w.status, releasedAt: w.released_at })),
     checkInHistory: (checkRes.data || []).map((c) => ({ id: c.id, timestamp: c.claimed_at, rewardEtb: Number(c.reward_etb) })),
     deposits: (depositRes.data || []).map((d) => ({ id: d.id, amountEtb: Number(d.amount_etb), referenceCode: d.reference_code, paymentMethodName: d.payment_method_name, accountName: d.account_name, accountNumber: d.account_number, receiptFilename: d.receipt_filename, status: d.status, rejectionReason: d.rejection_reason, createdAt: d.created_at })),
@@ -1017,14 +1030,91 @@ async function handle(req: Request): Promise<Response> {
     })) });
   }
 
-  // Funds movement, investment purchases, reward credits, and their admin actions
-  // are hard-disabled in this release. Configuration and read-only records remain available.
-  if (
-    route === "/me/check-in" || route === "/gift-code" ||
-    route === "/plans/buy" || route.startsWith("/plans/") ||
-    route.startsWith("/welfare/")
-  ) {
-    return json({ error: "Financial functions are disabled in this release. No money will be accepted, credited, debited, or transferred." }, 503);
+  // Plan purchase/claim endpoints are guarded by a server-side feature switch.
+  // They remain unavailable until the plan lifecycle has passed staging tests and is explicitly enabled.
+  const isPlanAction =
+    (method === "POST" && (route === "/plans/buy" || route === "/welfare/buy")) ||
+    (method === "POST" && /^\\/plans\\/[^/]+\\/claim$/.test(route)) ||
+    (method === "POST" && /^\\/welfare\\/[^/]+\\/(claim|release)$/.test(route));
+
+  if (isPlanAction) {
+    if (Deno.env.get("ZENTRO_PLAN_FEATURES_ENABLED") !== "true") {
+      return json({ error: "Plan service is not available." }, 503);
+    }
+
+    const auth = await getAuth(req);
+    if (!auth) return json({ error: "Authentication required." }, 401);
+    if (auth.role !== "customer") return json({ error: "Customer account required." }, 403);
+
+    if (method === "POST" && route === "/plans/buy") {
+      const body = await req.json().catch(() => ({}));
+      const planId = typeof body.planId === "string" ? body.planId.trim() : "";
+      const plan = VIP_PLANS.find((item) => item.id === planId);
+      if (!plan) return json({ error: "Choose a valid Daily VIP plan." }, 400);
+      const id = "vip-" + crypto.randomUUID().slice(0, 12);
+      const { data, error } = await db.rpc("zentro_buy_vip_plan", {
+        p_user_id: auth.userId, p_id: id, p_plan_id: plan.id, p_tier: plan.tier,
+        p_investment: plan.investmentEtb, p_daily_income: plan.dailyIncomeEtb,
+        p_cycle_days: plan.cycleDays
+      });
+      if (error) throw error;
+      if (!data?.ok) return json({ error: data?.error || "Plan purchase could not be completed." }, 400);
+      return json(data, 201);
+    }
+
+    const vipClaimMatch = route.match(/^\\/plans\\/([^/]+)\\/claim$/);
+    if (method === "POST" && vipClaimMatch) {
+      const planId = decodeURIComponent(vipClaimMatch[1]);
+      const { data, error } = await db.rpc("zentro_claim_vip_daily", {
+        p_user_id: auth.userId, p_plan_id: planId
+      });
+      if (error) throw error;
+      if (!data?.ok) return json({ error: data?.error || "Daily claim could not be completed.", ...data }, 400);
+      return json(data);
+    }
+
+    if (method === "POST" && route === "/welfare/buy") {
+      const body = await req.json().catch(() => ({}));
+      const planId = typeof body.planId === "string" ? body.planId.trim() : "";
+      const plan = WELFARE_PLANS.find((item) => item.id === planId);
+      if (!plan) return json({ error: "Choose a valid Welfare plan." }, 400);
+      const id = "wel-" + crypto.randomUUID().slice(0, 12);
+      const { data, error } = await db.rpc("zentro_buy_welfare_plan", {
+        p_user_id: auth.userId, p_id: id, p_plan_id: plan.id, p_plan_name: plan.name,
+        p_investment: plan.investmentEtb, p_daily_amount: plan.dailyAmountEtb,
+        p_duration_days: plan.durationDays
+      });
+      if (error) throw error;
+      if (!data?.ok) return json({ error: data?.error || "Welfare plan purchase could not be completed." }, 400);
+      return json(data, 201);
+    }
+
+    const welfareClaimMatch = route.match(/^\\/welfare\\/([^/]+)\\/claim$/);
+    if (method === "POST" && welfareClaimMatch) {
+      const enrollmentId = decodeURIComponent(welfareClaimMatch[1]);
+      const { data, error } = await db.rpc("zentro_claim_welfare_daily", {
+        p_user_id: auth.userId, p_enrollment_id: enrollmentId
+      });
+      if (error) throw error;
+      if (!data?.ok) return json({ error: data?.error || "Welfare claim could not be completed.", ...data }, 400);
+      return json(data);
+    }
+
+    const welfareReleaseMatch = route.match(/^\\/welfare\\/([^/]+)\\/release$/);
+    if (method === "POST" && welfareReleaseMatch) {
+      const enrollmentId = decodeURIComponent(welfareReleaseMatch[1]);
+      const { data, error } = await db.rpc("zentro_release_welfare_vault", {
+        p_user_id: auth.userId, p_enrollment_id: enrollmentId
+      });
+      if (error) throw error;
+      if (!data?.ok) return json({ error: data?.error || "Welfare release could not be completed.", ...data }, 400);
+      return json(data);
+    }
+  }
+
+  // Gift-code and check-in reward credits remain behind their separate release gate.
+  if (route === "/me/check-in" || route === "/gift-code") {
+    return json({ error: "This service is not available." }, 503);
   }
 
   const uploadMatch = route.match(/^\/uploads\/([^/]+)$/);
