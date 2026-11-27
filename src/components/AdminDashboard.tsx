@@ -394,7 +394,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         expiresAt: giftExpiry ? new Date(giftExpiry).toISOString() : null,
       });
       setIssuedGiftCode(result.giftCode.code);
-      showNotice(true, 'Gift code created. Keep it private until redemption is released.');
+      showNotice(true, 'Gift code created. Share it only with the intended recipient(s).');
       await loadAllAdminData();
     } catch (err) {
       showNotice(false, (err as Error).message);
@@ -1658,8 +1658,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
 
               <div className="rounded-2xl border border-amber-200 bg-amber-50/70 p-4 space-y-2">
-                <p className="text-sm font-semibold text-slate-950">Redemption is not released yet</p>
-                <p className="text-xs text-slate-700">Codes can be prepared and managed here, but customer redemption remains locked until the wallet-credit flow completes its release checks. Do not distribute codes yet.</p>
+                <p className="text-sm font-semibold text-slate-950">Gift code redemption is enabled</p>
+                <p className="text-xs text-slate-700">Codes credit the wallet once per customer, subject to the redemption limit and expiry date. Keep generated codes private and distribute them only to intended recipients.</p>
               </div>
 
               <form onSubmit={handleCreateGiftCode} className="rounded-2xl border border-slate-200 bg-white p-5 space-y-4">
