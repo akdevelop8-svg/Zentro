@@ -33,7 +33,6 @@ import {
 } from '../types/zentro';
 import {
   calculateWithdrawalPreview,
-  canRequestWithdrawal,
   fileToBase64DataUrl,
 } from '../utils/zentroLogic';
 import { RegistrationTermsContent } from './RegistrationTermsView';
@@ -154,7 +153,7 @@ export const CustomerModals: React.FC<CustomerModalsProps> = ({
 
   const selectedDepositMethod =
     enabledDepositMethods.find((m) => m.id === depMethodId) ?? enabledDepositMethods[0];
-  const meetsWithdrawalRequirement = canRequestWithdrawal(purchasedCount);
+  const meetsWithdrawalRequirement = true;
   const wdPreview = calculateWithdrawalPreview(
     Number(wdAmount),
     settings.withdrawalFeePercent
@@ -488,11 +487,7 @@ export const CustomerModals: React.FC<CustomerModalsProps> = ({
                         meetsWithdrawalRequirement ? 'text-emerald-700' : 'text-red-700'
                       }`}
                     >
-                      {meetsWithdrawalRequirement
-                        ? `1-plan requirement met (${purchasedCount} plan${
-                            purchasedCount === 1 ? '' : 's'
-                          }).`
-                        : 'Purchase at least 1 plan before first withdrawal.'}
+                      Bank withdrawal is available from your wallet balance; no plan purchase is required.
                     </p>
                     {currentUser.bankAccount ? (
                       <p className="text-[11px] text-blue-900 font-medium">
