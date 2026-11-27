@@ -269,9 +269,11 @@ export const PurchasedView: React.FC<PurchasedViewProps> = ({
                           <p className="inline-flex items-center gap-1.5 text-[11px] text-slate-600">
                             <Lock className="h-3.5 w-3.5 text-amber-600 shrink-0" />
                             <span>
-                              {state.isMatured
-                                ? 'Maturity reached — your accumulated profit is ready for your Wallet.'
-                                : `Safe & locked until Day ${w.durationDays}. Cannot be withdrawn early.`}
+                              {state.canReleaseToWallet
+                                ? 'Maturity reached — all daily claims are complete and your Welfare Vault is ready to release.'
+                                : state.isMatured
+                                  ? 'Maturity reached — complete the remaining daily claims before releasing your Welfare Vault.'
+                                  : `Safe & locked until Day ${w.durationDays}. Cannot be withdrawn early.`}
                             </span>
                           </p>
                         </div>
