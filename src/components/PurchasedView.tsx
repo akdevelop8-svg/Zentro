@@ -303,7 +303,7 @@ export const PurchasedView: React.FC<PurchasedViewProps> = ({
                                 ? 'Saving...'
                                 : `Claim Daily (+${w.dailyAmountEtb.toLocaleString()} ETB to Vault)`}
                             </button>
-                          ) : w.claimedDays < w.durationDays ? (
+                          ) : FINANCIAL_FEATURES_ENABLED && w.claimedDays < w.durationDays ? (
                             <div className="flex-1 min-h-[42px] px-3.5 rounded-xl border border-slate-200 bg-slate-50 flex items-center justify-between text-xs">
                               <span className="text-slate-600">Next claim in</span>
                               <span className="font-mono tabular-nums font-bold text-blue-800">
@@ -403,6 +403,8 @@ export const PurchasedView: React.FC<PurchasedViewProps> = ({
                             </span>
                             <span aria-hidden="true">·</span>
                             <span>{rec.cycleDays} Days</span>
+                            <span aria-hidden="true">·</span>
+                            <span>{rec.claimedDays}/{rec.cycleDays} Claimed</span>
                           </div>
                         </div>
                         <div className="text-right">
