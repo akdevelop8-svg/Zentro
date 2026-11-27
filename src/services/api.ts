@@ -9,6 +9,7 @@ import {
   CustomerProfilePayload,
   DepositRequestItem,
   FeedbackItem,
+  GiftCodeItem,
   PaymentSettings,
   VipPlan,
   WithdrawalRequestItem,
@@ -410,6 +411,27 @@ export async function apiAdminUpdatePaymentSettings(
   return apiRequest('/admin/payment-settings', {
     method: 'PUT',
     body: JSON.stringify(settings),
+  });
+}
+
+export async function apiAdminGiftCodes(): Promise<{ giftCodes: GiftCodeItem[] }> {
+  return apiRequest('/admin/gift-codes');
+}
+
+export async function apiAdminCreateGiftCode(payload: {
+  amountEtb: number;
+  maxRedemptions: number;
+  expiresAt?: string | null;
+}): Promise<{ ok: boolean; giftCode: GiftCodeItem }> {
+  return apiRequest('/admin/gift-codes', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function apiAdminRevokeGiftCode(code: string): Promise<{ ok: boolean; code: string }> {
+  return apiRequest(`/admin/gift-codes/${encodeURIComponent(code)}/revoke`, {
+    method: 'POST',
   });
 }
 
