@@ -192,8 +192,16 @@ export default function App() {
   };
 
   const handleSaveBankAccount = async (account: BankAccountInfo) => {
-    await apiSaveBankAccount(account);
-    await refreshCustomerProfile();
+    const saved = await apiSaveBankAccount(account);
+    // Update the UI as soon as the backend confirms the write. Refresh the rest
+    // of the profile in the background so a bank-account save does not wait for
+    // every dashboard query to finish.
+    setCustomerProfile((current) =>
+      current
+        ? { ...current, user: { ...current.user, bankAccount: saved.bankAccount } }
+        : current
+    );
+    void refreshCustomerProfile().catch(() => undefined);
   };
 
   const handleChangeCustomerTab = (tab: CustomerTab) => {
