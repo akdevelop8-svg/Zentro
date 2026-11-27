@@ -144,6 +144,19 @@ export const WELFARE_PLANS: WelfarePlan[] = [
   },
 ];
 
+/** Calculates the planned total profit from a daily amount and plan duration. */
+export function calculateTotalProfitEtb(dailyProfitEtb: number, dayLength: number): number {
+  if (
+    !Number.isFinite(dailyProfitEtb) ||
+    !Number.isInteger(dayLength) ||
+    dailyProfitEtb < 0 ||
+    dayLength < 0
+  ) {
+    return 0;
+  }
+  return Math.round(dailyProfitEtb * dayLength * 100) / 100;
+}
+
 const DAY_MS = 24 * 3600 * 1000;
 
 export function formatCountdown(totalSeconds: number): {
@@ -282,7 +295,7 @@ export function getWelfareClaimState(
   const isActive = enrollment.status === 'Active';
   const canClaimDaily = isActive && hasRemainingDays && cooldownPassed;
   const canReleaseToWallet = isActive && isMatured && enrollment.accumulatedEtb > 0;
-  const totalExpectedEtb = enrollment.dailyAmountEtb * enrollment.durationDays;
+  const totalExpectedEtb = calculateTotalProfitEtb(enrollment.dailyAmountEtb, enrollment.durationDays);
 
   return {
     currentDay,
