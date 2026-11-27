@@ -23,6 +23,7 @@ import {
   apiVerifyGiftCode,
   uploadImageUrl,
   FINANCIAL_FEATURES_ENABLED,
+  BANK_TRANSFER_FEATURES_ENABLED,
 } from '../services/api';
 import {
   ActiveModal,
@@ -134,8 +135,9 @@ export const CustomerModals: React.FC<CustomerModalsProps> = ({
 
   if (!modal) return null;
 
-  const isFinancialModal = ['recharge', 'withdraw', 'giftcode', 'plan', 'welfare'].includes(modal.type);
-  if (!FINANCIAL_FEATURES_ENABLED && isFinancialModal) {
+  const isBankTransferModal = modal.type === 'recharge' || modal.type === 'withdraw';
+  const isOtherFinancialModal = ['giftcode', 'plan', 'welfare'].includes(modal.type);
+  if ((!BANK_TRANSFER_FEATURES_ENABLED && isBankTransferModal) || (!FINANCIAL_FEATURES_ENABLED && isOtherFinancialModal)) {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 backdrop-blur-xs p-4">
         <div role="dialog" aria-modal="true" aria-labelledby="financial-paused-title" className="w-full max-w-sm rounded-2xl border border-amber-200 bg-white p-5 shadow-xl space-y-3">
