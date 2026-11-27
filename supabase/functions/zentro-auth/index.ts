@@ -1034,8 +1034,8 @@ async function handle(req: Request): Promise<Response> {
   // They remain unavailable until the plan lifecycle has passed staging tests and is explicitly enabled.
   const isPlanAction =
     (method === "POST" && (route === "/plans/buy" || route === "/welfare/buy")) ||
-    (method === "POST" && /^\\/plans\\/[^/]+\\/claim$/.test(route)) ||
-    (method === "POST" && /^\\/welfare\\/[^/]+\\/(claim|release)$/.test(route));
+    (method === "POST" && /^/plans/[^/]+/claim$/.test(route)) ||
+    (method === "POST" && /^/welfare/[^/]+/(claim|release)$/.test(route));
 
   if (isPlanAction) {
     if (Deno.env.get("ZENTRO_PLAN_FEATURES_ENABLED") !== "true") {
@@ -1062,7 +1062,7 @@ async function handle(req: Request): Promise<Response> {
       return json(data, 201);
     }
 
-    const vipClaimMatch = route.match(/^\\/plans\\/([^/]+)\\/claim$/);
+    const vipClaimMatch = route.match(new RegExp("^/plans/([^/]+)/claim$"));
     if (method === "POST" && vipClaimMatch) {
       const planId = decodeURIComponent(vipClaimMatch[1]);
       const { data, error } = await db.rpc("zentro_claim_vip_daily", {
@@ -1089,7 +1089,7 @@ async function handle(req: Request): Promise<Response> {
       return json(data, 201);
     }
 
-    const welfareClaimMatch = route.match(/^\\/welfare\\/([^/]+)\\/claim$/);
+    const welfareClaimMatch = route.match(new RegExp("^/welfare/([^/]+)/claim$"));
     if (method === "POST" && welfareClaimMatch) {
       const enrollmentId = decodeURIComponent(welfareClaimMatch[1]);
       const { data, error } = await db.rpc("zentro_claim_welfare_daily", {
@@ -1100,7 +1100,7 @@ async function handle(req: Request): Promise<Response> {
       return json(data);
     }
 
-    const welfareReleaseMatch = route.match(/^\\/welfare\\/([^/]+)\\/release$/);
+    const welfareReleaseMatch = route.match(new RegExp("^/welfare/([^/]+)/release$"));
     if (method === "POST" && welfareReleaseMatch) {
       const enrollmentId = decodeURIComponent(welfareReleaseMatch[1]);
       const { data, error } = await db.rpc("zentro_release_welfare_vault", {
