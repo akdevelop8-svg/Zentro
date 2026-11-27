@@ -374,10 +374,6 @@ export const AuthView: React.FC<AuthViewProps> = ({
                 </div>
               </div>
 
-              <p className="rounded-xl border border-blue-100 bg-blue-50/60 px-3 py-2 text-[11px] leading-relaxed text-blue-900">
-                No OTP, SMS, email, or recovery code is used. Your registration details are stored directly in ZENTRO.
-              </p>
-
               {regError && (
                 <div
                   role="alert"
