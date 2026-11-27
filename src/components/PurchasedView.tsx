@@ -9,7 +9,12 @@ import {
   ShoppingBag,
   Unlock,
 } from 'lucide-react';
-import { FINANCIAL_FEATURES_ENABLED, apiClaimWelfareDaily, apiReleaseWelfareVault } from '../services/api';
+import {
+  FINANCIAL_FEATURES_ENABLED,
+  apiClaimVipDaily,
+  apiClaimWelfareDaily,
+  apiReleaseWelfareVault,
+} from '../services/api';
 import {
   ActivityHistoryEntry,
   PurchasedPlanRecord,
@@ -47,6 +52,28 @@ export const PurchasedView: React.FC<PurchasedViewProps> = ({
     const id = window.setInterval(() => setNowMs(Date.now()), 1000);
     return () => window.clearInterval(id);
   }, []);
+
+  const handleClaimVipDaily = async (plan: PurchasedPlanRecord) => {
+    setBusyId(plan.id);
+    setFeedback(null);
+    try {
+      const res = await apiClaimVipDaily(plan.id);
+      await onRefreshMe();
+      setFeedback({
+        id: plan.id,
+        ok: true,
+        message: `Day ${res.claimedDays} claimed: +${res.dailyIncomeEtb.toLocaleString()} ETB credited to your wallet.`,
+      });
+    } catch (err) {
+      setFeedback({
+        id: plan.id,
+        ok: false,
+        message: (err as Error).message,
+      });
+    } finally {
+      setBusyId(null);
+    }
+  };
 
   const handleClaimWelfare = async (enrollment: WelfareEnrollmentRecord) => {
     setBusyId(enrollment.id);
@@ -330,7 +357,23 @@ export const PurchasedView: React.FC<PurchasedViewProps> = ({
                     Math.floor((rec.nextCycleAt - nowMs) / 1000)
                   );
                   const countdown = formatCountdown(remainingSeconds);
-                  const isActive = rec.status === 'Active';
+                  const expiresAtMs =
+                    rec.expiresAtMs ||
+                    new Date(rec.purchaseDate).getTime() + rec.cycleDays * 24 * 3600 * 1000;
+                  const expiryRemainingSeconds = Math.max(
+                    0,
+                    Math.floor((expiresAtMs - nowMs) / 1000)
+                  );
+                  const expiryCountdown = formatMultiDayCountdown(
+                    expiryRemainingSeconds,
+                    rec.cycleDays
+                  );
+                  const isExpired =
+                    rec.status === 'Expired' ||
+                    nowMs > expiresAtMs ||
+                    rec.claimedDays >= rec.cycleDays;
+                  const isActive = rec.status === 'Active' && !isExpired;
+                  const rowFeedback = feedback?.id === rec.id ? feedback : null;
 
                   return (
                     <article
@@ -350,7 +393,7 @@ export const PurchasedView: React.FC<PurchasedViewProps> = ({
                                 isActive ? 'text-amber-700' : 'text-slate-500'
                               }`}
                             >
-                              · {rec.status}
+                              · {isExpired ? 'Expired' : rec.status}
                             </span>
                           </div>
                           <div className="flex items-center gap-2 text-xs text-slate-600 mt-1">
@@ -375,32 +418,67 @@ export const PurchasedView: React.FC<PurchasedViewProps> = ({
                         </div>
                       </div>
 
-                      {/* 24h Cycle Countdown */}
+                      {/* 24-hour claim cycle and fixed plan expiry */}
                       <div className="rounded-xl border border-amber-200/70 bg-slate-50 p-3.5 space-y-2">
                         <div className="flex items-center justify-between gap-2">
                           <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-800">
                             <Clock className="h-4 w-4 text-amber-600" />
-                            24h Activity Countdown
+                            Next Daily Claim
                           </span>
                           <span className="font-mono tabular-nums text-base font-bold text-blue-800">
-                            {countdown.formatted}
+                            {isExpired ? 'Expired' : countdown.formatted}
                           </span>
                         </div>
 
-                        <div
-                          role="progressbar"
-                          aria-valuenow={countdown.progressPercent}
-                          aria-valuemin={0}
-                          aria-valuemax={100}
-                          aria-label={`${rec.tier} 24-hour cycle progress`}
-                          className="h-2 w-full rounded-full bg-slate-200 overflow-hidden"
-                        >
+                        {!isExpired && (
                           <div
-                            className="h-full rounded-full bg-gradient-to-r from-blue-700 via-blue-600 to-amber-500 transition-all duration-300"
-                            style={{ width: `${countdown.progressPercent}%` }}
-                          />
+                            role="progressbar"
+                            aria-valuenow={countdown.progressPercent}
+                            aria-valuemin={0}
+                            aria-valuemax={100}
+                            aria-label={`${rec.tier} 24-hour cycle progress`}
+                            className="h-2 w-full rounded-full bg-slate-200 overflow-hidden"
+                          >
+                            <div
+                              className="h-full rounded-full bg-gradient-to-r from-blue-700 via-blue-600 to-amber-500 transition-all duration-300"
+                              style={{ width: `${countdown.progressPercent}%` }}
+                            />
+                          </div>
+                        )}
+
+                        <div className="flex items-center justify-between gap-2 text-[11px] text-slate-600">
+                          <span>Plan expiry</span>
+                          <span className={`font-mono tabular-nums font-semibold ${isExpired ? 'text-slate-500' : 'text-amber-800'}`}>
+                            {isExpired ? 'Expired' : expiryCountdown.formatted}
+                          </span>
                         </div>
+
+                        {!isExpired && FINANCIAL_FEATURES_ENABLED && remainingSeconds === 0 && (
+                          <button
+                            type="button"
+                            disabled={busyId === rec.id}
+                            onClick={() => handleClaimVipDaily(rec)}
+                            className="w-full min-h-[42px] rounded-xl bg-blue-700 hover:bg-blue-800 disabled:opacity-60 text-white text-xs font-semibold cursor-pointer transition-colors"
+                          >
+                            {busyId === rec.id
+                              ? 'Claiming...'
+                              : `Claim Daily Mining (+${rec.dailyIncomeEtb.toLocaleString()} ETB)`}
+                          </button>
+                        )}
                       </div>
+
+                      {rowFeedback && (
+                        <p
+                          role="status"
+                          className={`rounded-xl border px-3 py-2 text-xs font-medium ${
+                            rowFeedback.ok
+                              ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                              : 'border-red-200 bg-red-50 text-red-700'
+                          }`}
+                        >
+                          {rowFeedback.message}
+                        </p>
+                      )}
                     </article>
                   );
                 })}
