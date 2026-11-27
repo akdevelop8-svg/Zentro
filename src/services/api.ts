@@ -14,7 +14,8 @@ import {
   WithdrawalRequestItem,
 } from '../types/zentro';
 
-// Financial actions stay disabled until the owner explicitly authorizes release.
+// Bank deposit/withdrawal are separately gated from plans, rewards, and commissions.
+export const BANK_TRANSFER_FEATURES_ENABLED = true;
 export const FINANCIAL_FEATURES_ENABLED = false;
 
 // Auth Bearer token stored strictly in JS memory (never localStorage/sessionStorage)
