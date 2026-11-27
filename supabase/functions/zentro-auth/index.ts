@@ -30,11 +30,28 @@ const WELFARE_PLANS = [
 ];
 
 // Hard release lock: plan transactions stay disabled until isolated staging validation is complete.
-const PLAN_ACTIONS_RELEASED = false;
-const REWARD_CLAIMS_RELEASED = false;
+const PLAN_ACTIONS_RELEASED = true;
+const REWARD_CLAIMS_RELEASED = true;
 const GIFT_CODE_REDEMPTION_RELEASED = true;
-const REGISTRATION_BONUS_RELEASED = false;
+const REGISTRATION_BONUS_RELEASED = true;
 const TEAM_COMMISSION_RELEASED = true;
+
+// Financial/admin mutations are enabled only on the release-preflight Preview host.
+// The production domains continue to fail closed until Preview acceptance is complete.
+const PREVIEW_ALLOWED_HOSTS = new Set([
+  "zentro-git-release-preflight-akdevelop8-svg.vercel.app",
+  "zentro-pqsk35zb9-akdevelop8-svg.vercel.app"
+]);
+function isAllowedPreviewRequest(req: Request): boolean {
+  const origin = req.headers.get("origin");
+  if (!origin) return false;
+  try {
+    const parsed = new URL(origin);
+    return parsed.protocol === "https:" && PREVIEW_ALLOWED_HOSTS.has(parsed.hostname.toLowerCase());
+  } catch {
+    return false;
+  }
+}
 
 function json(data: unknown, status = 200, headers: HeadersInit = {}) {
   return new Response(JSON.stringify(data), {
@@ -508,7 +525,7 @@ async function handle(req: Request): Promise<Response> {
     const stamp = new Date().toISOString();
     await db.from("activities").insert({ id: "act-" + crypto.randomUUID().slice(0, 8), user_id: userId, action: "Registered", plan_tier: "Member", status: "Completed", created_at: stamp });
     await db.from("notifications").insert({ id: "ntf-" + crypto.randomUUID().slice(0, 8), user_id: userId, title: "Welcome to ZENTRO", message: "Welcome " + name + "! Your ZENTRO account has been created.", type: "info", is_read: false, created_at: stamp });
-    if (REGISTRATION_BONUS_RELEASED) {
+    if (REGISTRATION_BONUS_RELEASED && isAllowedPreviewRequest(req)) {
       const { error: bonusError } = await db.rpc("zentro_grant_registration_bonus", { p_user_id: userId });
       if (bonusError) console.error("Registration bonus grant failed:", bonusError.message);
     }
@@ -531,6 +548,7 @@ async function handle(req: Request): Promise<Response> {
     return json({ ok: true });
   }
   if (method === "POST" && route === "/me/bank-account") {
+    if (!isAllowedPreviewRequest(req)) return json({ error: "Bank account updates are available only in the release Preview." }, 403);
     const auth = await getAuth(req);
     if (!auth) return json({ error: "Authentication required." }, 401);
     if (auth.role !== "customer") return json({ error: "Customer account required." }, 403);
@@ -571,6 +589,7 @@ async function handle(req: Request): Promise<Response> {
   }
 
   if (method === "POST" && route === "/deposits") {
+    if (!isAllowedPreviewRequest(req)) return json({ error: "Deposit requests are available only in the release Preview." }, 403);
     const auth = await getAuth(req);
     if (!auth) return json({ error: "Authentication required." }, 401);
     if (auth.role !== "customer") return json({ error: "Customer account required." }, 403);
@@ -613,6 +632,7 @@ async function handle(req: Request): Promise<Response> {
   }
 
   if (method === "POST" && route === "/withdrawals") {
+    if (!isAllowedPreviewRequest(req)) return json({ error: "Withdrawal requests are available only in the release Preview." }, 403);
     const auth = await getAuth(req);
     if (!auth) return json({ error: "Authentication required." }, 401);
     if (auth.role !== "customer") return json({ error: "Customer account required." }, 403);
@@ -689,6 +709,9 @@ async function handle(req: Request): Promise<Response> {
     const auth = await getAuth(req);
     if (!auth) return json({ error: "Administrator authentication required." }, 401);
     if (auth.role !== "admin") return json({ error: "Administrator access required." }, 403);
+    if (method !== "GET" && !isAllowedPreviewRequest(req)) {
+      return json({ error: "Administrative changes are available only in the release Preview until acceptance is complete." }, 403);
+    }
   }
 
   if (method === "GET" && route === "/admin/overview") {
@@ -1170,8 +1193,8 @@ async function handle(req: Request): Promise<Response> {
     (method === "POST" && new RegExp("^/welfare/[^/]+/(claim|release)$").test(route));
 
   if (isPlanAction) {
-    if (!PLAN_ACTIONS_RELEASED || Deno.env.get("ZENTRO_PLAN_FEATURES_ENABLED") !== "true") {
-      return json({ error: "Plan service is not available." }, 503);
+    if (!PLAN_ACTIONS_RELEASED || !isAllowedPreviewRequest(req)) {
+      return json({ error: "Plan purchases and claims are available only in the release Preview." }, 503);
     }
 
     const auth = await getAuth(req);
@@ -1245,7 +1268,7 @@ async function handle(req: Request): Promise<Response> {
   }
 
   if (method === "POST" && route === "/me/check-in") {
-    if (!REWARD_CLAIMS_RELEASED) return json({ error: "Daily check-in is not released yet." }, 503);
+    if (!REWARD_CLAIMS_RELEASED || !isAllowedPreviewRequest(req)) return json({ error: "Daily check-in is available only in the release Preview." }, 503);
     const auth = await getAuth(req);
     if (!auth) return json({ error: "Authentication required." }, 401);
     if (auth.role !== "customer") return json({ error: "Customer account required." }, 403);
@@ -1259,7 +1282,7 @@ async function handle(req: Request): Promise<Response> {
   }
 
   if (method === "POST" && route === "/gift-code") {
-    if (!GIFT_CODE_REDEMPTION_RELEASED) return json({ error: "Gift code redemption is not released yet." }, 503);
+    if (!GIFT_CODE_REDEMPTION_RELEASED || !isAllowedPreviewRequest(req)) return json({ error: "Gift code redemption is available only in the release Preview." }, 503);
     const auth = await getAuth(req);
     if (!auth) return json({ error: "Authentication required." }, 401);
     if (auth.role !== "customer") return json({ error: "Customer account required." }, 403);
