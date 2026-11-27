@@ -293,7 +293,11 @@ export function getWelfareClaimState(
 
   const isActive = enrollment.status === 'Active';
   const canClaimDaily = isActive && hasRemainingDays && cooldownPassed;
-  const canReleaseToWallet = isActive && isMatured && enrollment.accumulatedEtb > 0;
+  const canReleaseToWallet =
+    isActive &&
+    isMatured &&
+    enrollment.claimedDays >= enrollment.durationDays &&
+    enrollment.accumulatedEtb > 0;
   const totalExpectedEtb = calculateTotalProfitEtb(enrollment.dailyAmountEtb, enrollment.durationDays);
 
   return {
