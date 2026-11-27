@@ -485,7 +485,7 @@ async function handle(req: Request): Promise<Response> {
     }
     const stamp = new Date().toISOString();
     await db.from("activities").insert({ id: "act-" + crypto.randomUUID().slice(0, 8), user_id: userId, action: "Registered", plan_tier: "Member", status: "Completed", created_at: stamp });
-    await db.from("notifications").insert({ id: "ntf-" + crypto.randomUUID().slice(0, 8), user_id: userId, title: "Welcome to ZENTRO", message: "Welcome " + name + "! Your ZENTRO account has been created. Financial features are currently disabled.", type: "info", is_read: false, created_at: stamp });
+    await db.from("notifications").insert({ id: "ntf-" + crypto.randomUUID().slice(0, 8), user_id: userId, title: "Welcome to ZENTRO", message: "Welcome " + name + "! Your ZENTRO account has been created.", type: "info", is_read: false, created_at: stamp });
     const token = await issueToken({ userId, role: "customer", name });
     return json({ token, user: { id: user.id, name: user.name, phone: user.phone, role: "customer", termsAccepted: false } }, 201, { "set-cookie": sessionCookie(token) });
   }
