@@ -138,6 +138,7 @@ export interface PaymentSettings {
   level1CommissionPercent: number;
   level2CommissionPercent: number;
   level3CommissionPercent: number;
+  commissionBase: 'none' | 'verified_deposit';
   updatedAt: string;
 }
 
@@ -238,6 +239,17 @@ export interface CustomerProfilePayload {
   welfarePlans?: WelfarePlan[];
 }
 
+export interface GiftCodeItem {
+  code: string;
+  amountEtb: number;
+  maxRedemptions: number;
+  redemptionCount: number;
+  status: 'Active' | 'Revoked' | 'Exhausted';
+  expiresAt?: string | null;
+  createdBy: string;
+  createdAt: string;
+}
+
 export interface AdminOverviewData {
   totalCustomers: number;
   activeCustomers: number;
@@ -317,6 +329,7 @@ export type AdminSection =
   | 'feedback'
   | 'broadcasts'
   | 'payment_settings'
+  | 'rewards'
   | 'audit';
 
 export type ActiveModal =
