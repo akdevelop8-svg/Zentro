@@ -40,6 +40,7 @@ const TEAM_COMMISSION_RELEASED = true;
 const APP_ALLOWED_HOSTS = new Set([
   "zentro-git-release-preflight-akdevelop8-svg.vercel.app",
   "zentro-beta-six.vercel.app",
+  "zentro-akdevelop8-svg.vercel.app",
   "zentro-git-main-akdevelop8-svg.vercel.app"
 ]);
 function isAllowedAppRequest(req: Request): boolean {
