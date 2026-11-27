@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import {
   Bell,
+  Check,
   CheckCircle2,
   Clock,
+  Copy,
   Crown,
   Gift,
   Lock,
@@ -70,6 +72,7 @@ export const CustomerModals: React.FC<CustomerModalsProps> = ({
   const [depError, setDepError] = useState<string | null>(null);
   const [depSuccess, setDepSuccess] = useState(false);
   const [depLoading, setDepLoading] = useState(false);
+  const [copiedDepositField, setCopiedDepositField] = useState<string | null>(null);
 
   // Withdrawal form state
   const [wdMethodId, setWdMethodId] = useState(
@@ -162,6 +165,31 @@ export const CustomerModals: React.FC<CustomerModalsProps> = ({
       setDepReceiptDataUrl(dataUrl);
     } catch (err) {
       setDepError((err as Error).message);
+    }
+  };
+
+  const handleCopyDepositDetail = async (value: string, field: string) => {
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(value);
+      } else {
+        const textarea = document.createElement('textarea');
+        textarea.value = value;
+        textarea.setAttribute('readonly', '');
+        textarea.style.position = 'fixed';
+        textarea.style.left = '-9999px';
+        document.body.appendChild(textarea);
+        textarea.select();
+        const copied = document.execCommand('copy');
+        document.body.removeChild(textarea);
+        if (!copied) throw new Error('Clipboard permission unavailable');
+      }
+      setCopiedDepositField(field);
+      window.setTimeout(() => {
+        setCopiedDepositField((current) => current === field ? null : current);
+      }, 1800);
+    } catch {
+      setDepError('Copy was not available. Please select the account details and copy them manually.');
     }
   };
 
@@ -328,23 +356,41 @@ export const CustomerModals: React.FC<CustomerModalsProps> = ({
                   </div>
 
                   {selectedDepositMethod && (
-                    <div className="rounded-2xl border border-amber-200 bg-amber-50/70 p-3.5 text-xs space-y-1">
+                    <div className="rounded-2xl border border-amber-200 bg-amber-50/70 p-3.5 text-xs space-y-2">
                       <p className="font-semibold text-slate-950">
                         Transfer to {selectedDepositMethod.methodName}
                       </p>
-                      <p className="text-slate-700">
-                        Account Name:{' '}
-                        <span className="font-semibold text-slate-950">
-                          {selectedDepositMethod.accountName}
-                        </span>
-                      </p>
-                      <p className="text-slate-700">
-                        Account Number:{' '}
-                        <span className="font-mono font-bold text-blue-900">
-                          {selectedDepositMethod.accountNumber}
-                        </span>
-                      </p>
-                      <p className="text-[11px] text-amber-800">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="text-slate-500 text-[11px]">Account Name</p>
+                          <p className="font-semibold text-slate-950 break-words">{selectedDepositMethod.accountName}</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => void handleCopyDepositDetail(selectedDepositMethod.accountName, 'account-name')}
+                          className="shrink-0 inline-flex min-h-[34px] items-center gap-1 rounded-lg border border-amber-300 bg-white px-2.5 text-[11px] font-semibold text-blue-800 hover:bg-blue-50"
+                          aria-label="Copy deposit account name"
+                        >
+                          {copiedDepositField === 'account-name' ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                          {copiedDepositField === 'account-name' ? 'Copied' : 'Copy'}
+                        </button>
+                      </div>
+                      <div className="flex items-center justify-between gap-2 border-t border-amber-200/70 pt-2">
+                        <div className="min-w-0">
+                          <p className="text-slate-500 text-[11px]">Account Number</p>
+                          <p className="font-mono font-bold text-blue-900 break-all">{selectedDepositMethod.accountNumber}</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => void handleCopyDepositDetail(selectedDepositMethod.accountNumber, 'account-number')}
+                          className="shrink-0 inline-flex min-h-[34px] items-center gap-1 rounded-lg border border-amber-300 bg-white px-2.5 text-[11px] font-semibold text-blue-800 hover:bg-blue-50"
+                          aria-label="Copy deposit account number"
+                        >
+                          {copiedDepositField === 'account-number' ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                          {copiedDepositField === 'account-number' ? 'Copied' : 'Copy'}
+                        </button>
+                      </div>
+                      <p className="text-[11px] text-amber-800 pt-1">
                         Minimum Deposit: {settings.minRechargeEtb.toLocaleString()} ETB
                       </p>
                     </div>
