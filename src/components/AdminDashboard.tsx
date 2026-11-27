@@ -40,6 +40,7 @@ import {
   apiAdminUpdatePaymentSettings,
   apiAdminWithdrawals,
   uploadImageUrl,
+  FINANCIAL_FEATURES_ENABLED,
 } from '../services/api';
 import {
   AdminCustomerDetailPayload,
@@ -76,6 +77,10 @@ const ADMIN_NAV: {
   { id: 'payment_settings', label: 'Payment Settings', icon: CreditCard },
   { id: 'audit', label: 'Admin Activity / Audit Log', icon: ClipboardList },
 ];
+
+const ACTIVE_ADMIN_NAV = ADMIN_NAV.filter(({ id }) =>
+  FINANCIAL_FEATURES_ENABLED || !['deposits', 'withdrawals', 'payment_settings'].includes(id)
+);
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   currentUser,
@@ -412,7 +417,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         className="lg:hidden border-b border-slate-200 bg-white px-4 py-2 overflow-x-auto no-scrollbar"
       >
         <div className="flex items-center gap-1.5 min-w-max">
-          {ADMIN_NAV.map(({ id, label }) => (
+          {ACTIVE_ADMIN_NAV.map(({ id, label }) => (
             <button
               key={id}
               type="button"
@@ -438,7 +443,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             aria-label="Admin sidebar navigation"
             className="rounded-2xl border border-slate-200 bg-white p-2 space-y-1 sticky top-24"
           >
-            {ADMIN_NAV.map(({ id, label, icon: Icon }) => {
+            {ACTIVE_ADMIN_NAV.map(({ id, label, icon: Icon }) => {
               const active = section === id;
               return (
                 <button
@@ -595,13 +600,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     Search customers by phone or name, view complete profiles, and manage account status
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setSection('payment_settings')}
-                  className="min-h-[40px] px-3.5 rounded-xl border border-amber-300 bg-amber-50 hover:bg-amber-100 text-xs font-semibold text-amber-900 cursor-pointer"
-                >
-                  Withdrawal Time Schedule
-                </button>
+                {!FINANCIAL_FEATURES_ENABLED && <span className="text-[11px] font-medium text-amber-800">Financial controls paused until release</span>}
               </div>
 
               <div className="flex flex-wrap items-center justify-between gap-3">
@@ -702,7 +701,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           )}
 
           {/* 3. DEPOSIT REQUESTS */}
-          {section === 'deposits' && (
+          {FINANCIAL_FEATURES_ENABLED && section === 'deposits' && (
             <section className="space-y-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
@@ -829,7 +828,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           )}
 
           {/* 4. WITHDRAWAL REQUESTS */}
-          {section === 'withdrawals' && (
+          {FINANCIAL_FEATURES_ENABLED && section === 'withdrawals' && (
             <section className="space-y-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
@@ -1249,7 +1248,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           )}
 
           {/* 7. PAYMENT SETTINGS */}
-          {section === 'payment_settings' && paymentDraft && (
+          {FINANCIAL_FEATURES_ENABLED && section === 'payment_settings' && paymentDraft && (
             <section className="space-y-4">
               <div>
                 <h1 className="font-display text-2xl font-bold text-slate-950">
