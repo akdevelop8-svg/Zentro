@@ -62,12 +62,50 @@ export default function App() {
   const [activeModal, setActiveModal] = useState<ActiveModal>(null);
   const [loadingProfile, setLoadingProfile] = useState(false);
   const [restoringSession, setRestoringSession] = useState(true);
+  const [loadingTimedOut, setLoadingTimedOut] = useState(false);
 
   const refreshCustomerProfile = useCallback(async () => {
     const data = await apiGetMe();
     setCustomerProfile(data);
     setPublicSettings(data.paymentSettings);
   }, []);
+
+  const waitingForCustomerProfile = sessionUser?.role === 'customer' && !customerProfile;
+  useEffect(() => {
+    if (!restoringSession && !loadingProfile && !waitingForCustomerProfile) {
+      setLoadingTimedOut(false);
+      return;
+    }
+    setLoadingTimedOut(false);
+    const timeoutId = window.setTimeout(() => setLoadingTimedOut(true), 5000);
+    return () => window.clearTimeout(timeoutId);
+  }, [restoringSession, loadingProfile, waitingForCustomerProfile]);
+
+  const loadingScreen = (
+    <div className="min-h-screen bg-white flex items-center justify-center p-4">
+      <div className="w-full max-w-xs rounded-2xl border border-slate-200 bg-white px-4 py-4 text-center shadow-sm">
+        {loadingTimedOut ? (
+          <>
+            <p className="text-xs font-semibold text-slate-800">Loading exceeded 5 seconds.</p>
+            <p className="mt-1 text-[11px] text-slate-500">Check your connection and retry.</p>
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="mt-3 min-h-[38px] rounded-lg bg-blue-700 px-4 text-xs font-semibold text-white"
+            >
+              Retry
+            </button>
+          </>
+        ) : (
+          <div role="status" className="flex items-center justify-center gap-2">
+            <span aria-hidden="true" className="h-4 w-4 animate-spin rounded-full border-2 border-slate-200 border-t-blue-700" />
+            <span className="text-xs font-medium text-slate-600">Loading...</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
 
   useEffect(() => {
     let active = true;
@@ -164,16 +202,7 @@ export default function App() {
   };
 
   // Restoring persistent session before showing login
-  if (restoringSession) {
-    return (
-      <div className="min-h-screen bg-white flex items-center justify-center p-6">
-        <div className="text-center space-y-3">
-          <BrandLogo size="md" showTagline />
-          <p className="text-xs font-medium text-slate-600">Loading your account...</p>
-        </div>
-      </div>
-    );
-  }
+  if (restoringSession) return loadingScreen;
 
   // Unauthenticated -> Centered Logo + Shared Auth Box
   if (!sessionUser) {
@@ -192,16 +221,7 @@ export default function App() {
   }
 
   // Loading customer profile
-  if (loadingProfile || !customerProfile) {
-    return (
-      <div className="min-h-screen bg-white flex items-center justify-center p-6">
-        <div className="text-center space-y-3">
-          <BrandLogo size="md" showTagline />
-          <p className="text-xs font-medium text-slate-600">Loading your account...</p>
-        </div>
-      </div>
-    );
-  }
+  if (loadingProfile || !customerProfile) return loadingScreen;
 
   // Mandatory Registration Terms Gate
   if (!customerProfile.user.termsAccepted) {
