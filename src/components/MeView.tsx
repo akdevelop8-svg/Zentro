@@ -17,7 +17,7 @@ import {
   Users,
   Wallet,
 } from 'lucide-react';
-import { FINANCIAL_FEATURES_ENABLED } from '../services/api';
+import { BANK_TRANSFER_FEATURES_ENABLED, FINANCIAL_FEATURES_ENABLED } from '../services/api';
 import {
   ActiveModal,
   BankAccountInfo,
@@ -184,7 +184,7 @@ export const MeView: React.FC<MeViewProps> = ({
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-1.5 shrink-0">
             <button
               type="button"
-              disabled={!FINANCIAL_FEATURES_ENABLED}
+              disabled={!BANK_TRANSFER_FEATURES_ENABLED}
               onClick={() => onOpenModal({ type: 'recharge' })}
               className="min-h-[32px] sm:min-h-[36px] px-2.5 rounded-lg sm:rounded-xl bg-blue-700 text-white text-[11px] sm:text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50"
             >
@@ -192,7 +192,7 @@ export const MeView: React.FC<MeViewProps> = ({
             </button>
             <button
               type="button"
-              disabled={!FINANCIAL_FEATURES_ENABLED}
+              disabled={!BANK_TRANSFER_FEATURES_ENABLED}
               onClick={() => onOpenModal({ type: 'withdraw' })}
               className="min-h-[32px] sm:min-h-[36px] px-2.5 rounded-lg sm:rounded-xl border border-blue-700 bg-white text-blue-800 text-[11px] sm:text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50"
             >
@@ -370,7 +370,7 @@ export const MeView: React.FC<MeViewProps> = ({
           </div>
         )}
 
-        {FINANCIAL_FEATURES_ENABLED && (
+        {BANK_TRANSFER_FEATURES_ENABLED && (
           <>
         {/* Bank Account Management */}
         <button
