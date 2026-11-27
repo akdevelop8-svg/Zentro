@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import { calculateTotalProfitEtb, ROTATING_BANNER_SLIDES, WELFARE_PLANS } from '../utils/zentroLogic';
 import { DAILY_PLAN_IMAGES, WELFARE_PLAN_IMAGES } from '../assets/planImages';
-import { FINANCIAL_FEATURES_ENABLED, uploadImageUrl } from '../services/api';
+import { BANK_TRANSFER_FEATURES_ENABLED, FINANCIAL_FEATURES_ENABLED, GIFT_CODE_FEATURES_ENABLED, uploadImageUrl } from '../services/api';
 import { ActiveModal, BroadcastItem, VipPlan, WelfarePlan } from '../types/zentro';
 
 interface HomeViewProps {
@@ -160,7 +160,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
         <div className="grid grid-cols-4 gap-2 sm:gap-3">
           <button
             type="button"
-            disabled={!FINANCIAL_FEATURES_ENABLED}
+            disabled={!BANK_TRANSFER_FEATURES_ENABLED}
             onClick={() => onOpenModal({ type: 'recharge' })}
             className="min-h-[64px] rounded-2xl border border-slate-200 bg-white p-2 sm:p-3 flex flex-col sm:flex-row items-center justify-center sm:justify-start gap-1.5 sm:gap-2.5 transition-colors text-center sm:text-left shadow-xs disabled:cursor-not-allowed disabled:opacity-50"
           >
@@ -174,7 +174,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
 
           <button
             type="button"
-            disabled={!FINANCIAL_FEATURES_ENABLED}
+            disabled={!BANK_TRANSFER_FEATURES_ENABLED}
             onClick={() => onOpenModal({ type: 'withdraw' })}
             className="min-h-[64px] rounded-2xl border border-slate-200 bg-white hover:border-blue-600 p-2 sm:p-3 flex flex-col sm:flex-row items-center justify-center sm:justify-start gap-1.5 sm:gap-2.5 transition-colors cursor-pointer text-center sm:text-left shadow-xs"
           >
@@ -188,7 +188,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
 
           <button
             type="button"
-            disabled={!FINANCIAL_FEATURES_ENABLED}
+            disabled={!GIFT_CODE_FEATURES_ENABLED}
             onClick={() => onOpenModal({ type: 'giftcode' })}
             className="min-h-[64px] rounded-2xl border border-slate-200 bg-white p-2 sm:p-3 flex flex-col sm:flex-row items-center justify-center sm:justify-start gap-1.5 sm:gap-2.5 transition-colors text-center sm:text-left shadow-xs disabled:cursor-not-allowed disabled:opacity-50"
           >
