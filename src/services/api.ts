@@ -185,6 +185,17 @@ export async function apiBuyVipPlan(
   });
 }
 
+export async function apiClaimVipDaily(planId: string): Promise<{
+  ok: boolean;
+  claimedDays: number;
+  dailyIncomeEtb: number;
+  walletBalanceEtb: number;
+  nextCycleAt: number;
+  status: string;
+}> {
+  return apiRequest(`/plans/${encodeURIComponent(planId)}/claim`, { method: 'POST' });
+}
+
 export async function apiBuyWelfarePlan(
   planId: string
 ): Promise<{ ok: boolean; id: string; walletBalanceEtb: number }> {
@@ -202,18 +213,16 @@ export async function apiClaimWelfareDaily(
   accumulatedEtb: number;
   releasedToWallet: boolean;
 }> {
-  return apiRequest('/welfare/claim', {
+  return apiRequest(`/welfare/${encodeURIComponent(enrollmentId)}/claim`, {
     method: 'POST',
-    body: JSON.stringify({ enrollmentId }),
   });
 }
 
 export async function apiReleaseWelfareVault(
   enrollmentId: string
 ): Promise<{ ok: boolean; releasedEtb: number }> {
-  return apiRequest('/welfare/release', {
+  return apiRequest(`/welfare/${encodeURIComponent(enrollmentId)}/release`, {
     method: 'POST',
-    body: JSON.stringify({ enrollmentId }),
   });
 }
 
