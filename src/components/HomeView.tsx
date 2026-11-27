@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import { ROTATING_BANNER_SLIDES, WELFARE_PLANS } from '../utils/zentroLogic';
 import { DAILY_PLAN_IMAGES, WELFARE_PLAN_IMAGES } from '../assets/planImages';
-import { uploadImageUrl } from '../services/api';
+import { FINANCIAL_FEATURES_ENABLED, uploadImageUrl } from '../services/api';
 import { ActiveModal, BroadcastItem, VipPlan, WelfarePlan } from '../types/zentro';
 
 interface HomeViewProps {
@@ -155,13 +155,20 @@ export const HomeView: React.FC<HomeViewProps> = ({
         )}
       </section>
 
+      {/* Financial actions remain paused until release approval. */}
+      {!FINANCIAL_FEATURES_ENABLED && (
+        <p className="rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-xs font-medium text-amber-900">
+          Deposits, withdrawals, gift codes, rewards, and plan purchases are paused until ZENTRO is officially released.
+        </p>
+      )}
       {/* 4 Shortcut Actions */}
       <section aria-label="Quick shortcuts">
         <div className="grid grid-cols-4 gap-2 sm:gap-3">
           <button
             type="button"
+            disabled={!FINANCIAL_FEATURES_ENABLED}
             onClick={() => onOpenModal({ type: 'recharge' })}
-            className="min-h-[64px] rounded-2xl border border-slate-200 bg-white hover:border-blue-600 p-2 sm:p-3 flex flex-col sm:flex-row items-center justify-center sm:justify-start gap-1.5 sm:gap-2.5 transition-colors cursor-pointer text-center sm:text-left shadow-xs"
+            className="min-h-[64px] rounded-2xl border border-slate-200 bg-white p-2 sm:p-3 flex flex-col sm:flex-row items-center justify-center sm:justify-start gap-1.5 sm:gap-2.5 transition-colors text-center sm:text-left shadow-xs disabled:cursor-not-allowed disabled:opacity-50"
           >
             <span className="h-8 w-8 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center shrink-0">
               <ArrowDownCircle className="h-4 w-4" />
@@ -173,6 +180,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
 
           <button
             type="button"
+            disabled={!FINANCIAL_FEATURES_ENABLED}
             onClick={() => onOpenModal({ type: 'withdraw' })}
             className="min-h-[64px] rounded-2xl border border-slate-200 bg-white hover:border-blue-600 p-2 sm:p-3 flex flex-col sm:flex-row items-center justify-center sm:justify-start gap-1.5 sm:gap-2.5 transition-colors cursor-pointer text-center sm:text-left shadow-xs"
           >
@@ -186,8 +194,9 @@ export const HomeView: React.FC<HomeViewProps> = ({
 
           <button
             type="button"
+            disabled={!FINANCIAL_FEATURES_ENABLED}
             onClick={() => onOpenModal({ type: 'giftcode' })}
-            className="min-h-[64px] rounded-2xl border border-slate-200 bg-white hover:border-amber-500 p-2 sm:p-3 flex flex-col sm:flex-row items-center justify-center sm:justify-start gap-1.5 sm:gap-2.5 transition-colors cursor-pointer text-center sm:text-left shadow-xs"
+            className="min-h-[64px] rounded-2xl border border-slate-200 bg-white p-2 sm:p-3 flex flex-col sm:flex-row items-center justify-center sm:justify-start gap-1.5 sm:gap-2.5 transition-colors text-center sm:text-left shadow-xs disabled:cursor-not-allowed disabled:opacity-50"
           >
             <span className="h-8 w-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
               <Gift className="h-4 w-4" />
@@ -353,8 +362,9 @@ export const HomeView: React.FC<HomeViewProps> = ({
 
                       <button
                         type="button"
+                        disabled={!FINANCIAL_FEATURES_ENABLED}
                         onClick={() => onOpenModal({ type: 'plan', plan })}
-                        className="w-full min-h-[40px] sm:min-h-[44px] rounded-xl bg-blue-700 hover:bg-blue-800 text-white text-xs sm:text-sm font-semibold transition-colors cursor-pointer"
+                        className="w-full min-h-[40px] sm:min-h-[44px] rounded-xl bg-blue-700 text-white text-xs sm:text-sm font-semibold transition-colors cursor-not-allowed opacity-50 disabled:cursor-not-allowed"
                       >
                         Buy Plan
                       </button>
@@ -462,8 +472,9 @@ export const HomeView: React.FC<HomeViewProps> = ({
 
                       <button
                         type="button"
+                        disabled={!FINANCIAL_FEATURES_ENABLED}
                         onClick={() => onOpenModal({ type: 'welfare', plan })}
-                        className="w-full min-h-[40px] sm:min-h-[44px] rounded-xl border border-amber-400 bg-gradient-to-r from-blue-700 to-blue-800 hover:from-blue-800 hover:to-blue-900 text-white text-xs sm:text-sm font-semibold transition-colors cursor-pointer"
+                        className="w-full min-h-[40px] sm:min-h-[44px] rounded-xl border border-amber-400 bg-gradient-to-r from-blue-700 to-blue-800 text-white text-xs sm:text-sm font-semibold transition-colors cursor-not-allowed opacity-50 disabled:cursor-not-allowed"
                       >
                         Buy Plan
                       </button>
