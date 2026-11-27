@@ -9,7 +9,7 @@ import {
   ShoppingBag,
   Unlock,
 } from 'lucide-react';
-import { apiClaimWelfareDaily, apiReleaseWelfareVault } from '../services/api';
+import { FINANCIAL_FEATURES_ENABLED, apiClaimWelfareDaily, apiReleaseWelfareVault } from '../services/api';
 import {
   ActivityHistoryEntry,
   PurchasedPlanRecord,
@@ -257,7 +257,9 @@ export const PurchasedView: React.FC<PurchasedViewProps> = ({
 
                       {!isCompleted ? (
                         <div className="flex flex-col sm:flex-row gap-2">
-                          {state.canClaimDaily ? (
+                          {!FINANCIAL_FEATURES_ENABLED ? (
+                            <p className="flex-1 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs font-medium text-amber-900">Daily claims are paused until the official release.</p>
+                          ) : state.canClaimDaily ? (
                             <button
                               type="button"
                               disabled={busyId === w.id}
@@ -277,7 +279,7 @@ export const PurchasedView: React.FC<PurchasedViewProps> = ({
                             </div>
                           ) : null}
 
-                          {state.canReleaseToWallet && (
+                          {FINANCIAL_FEATURES_ENABLED && state.canReleaseToWallet && (
                             <button
                               type="button"
                               disabled={busyId === w.id}
