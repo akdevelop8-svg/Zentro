@@ -153,7 +153,6 @@ export const CustomerModals: React.FC<CustomerModalsProps> = ({
 
   const selectedDepositMethod =
     enabledDepositMethods.find((m) => m.id === depMethodId) ?? enabledDepositMethods[0];
-  const meetsWithdrawalRequirement = true;
   const wdPreview = calculateWithdrawalPreview(
     Number(wdAmount),
     settings.withdrawalFeePercent
@@ -484,7 +483,7 @@ export const CustomerModals: React.FC<CustomerModalsProps> = ({
                     )}
                     <p
                       className={`text-[11px] font-semibold ${
-                        meetsWithdrawalRequirement ? 'text-emerald-700' : 'text-red-700'
+                        'text-emerald-700'
                       }`}
                     >
                       Bank withdrawal is available from your wallet balance; no plan purchase is required.
