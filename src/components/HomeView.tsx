@@ -340,7 +340,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                             </span>
                           </div>
                           <div className="flex items-center justify-between gap-1">
-                            <span className="text-slate-600">Daily Income</span>
+                            <span className="text-slate-600">Daily Mining Amount</span>
                             <span className="font-mono tabular-nums font-bold text-blue-800">
                               {plan.dailyIncomeEtb.toLocaleString()} ETB
                             </span>
