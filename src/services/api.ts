@@ -18,7 +18,7 @@ import {
 // Bank deposit/withdrawal are separately gated from plans, rewards, and commissions.
 export const BANK_TRANSFER_FEATURES_ENABLED = true;
 export const GIFT_CODE_FEATURES_ENABLED = true;
-export const FINANCIAL_FEATURES_ENABLED = false;
+export const FINANCIAL_FEATURES_ENABLED = true;
 
 // Auth Bearer token stored strictly in JS memory (never localStorage/sessionStorage)
 let inMemoryToken: string | null = null;
