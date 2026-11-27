@@ -56,7 +56,7 @@ import {
   PaymentSettings,
   WithdrawalRequestItem,
 } from '../types/zentro';
-import { fileToBase64DataUrl } from '../utils/zentroLogic';
+import { calculateTotalProfitEtb, fileToBase64DataUrl } from '../utils/zentroLogic';
 
 interface AdminDashboardProps {
   currentUser: AuthSessionUser;
@@ -1678,8 +1678,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <span>
                       <strong>{p.tier}</strong> · {p.purchaseDate}
                     </span>
-                    <span className="font-mono">
-                      {p.investmentEtb.toLocaleString()} ETB ({p.status})
+                    <span className="font-mono text-right">
+                      <span className="block">{p.investmentEtb.toLocaleString()} ETB ({p.status})</span>
+                      <span className="block text-[11px] text-slate-500">
+                        Daily Profit: {p.dailyIncomeEtb.toLocaleString()} ETB × {p.cycleDays} days
+                      </span>
+                      <span className="block text-[11px] font-semibold text-emerald-700">
+                        Total Profit: {calculateTotalProfitEtb(p.dailyIncomeEtb, p.cycleDays).toLocaleString()} ETB
+                      </span>
                     </span>
                   </div>
                 ))
