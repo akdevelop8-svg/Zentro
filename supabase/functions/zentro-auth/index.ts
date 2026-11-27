@@ -32,8 +32,9 @@ const WELFARE_PLANS = [
 // Hard release lock: plan transactions stay disabled until isolated staging validation is complete.
 const PLAN_ACTIONS_RELEASED = false;
 const REWARD_CLAIMS_RELEASED = false;
+const GIFT_CODE_REDEMPTION_RELEASED = true;
 const REGISTRATION_BONUS_RELEASED = false;
-const TEAM_COMMISSION_RELEASED = false;
+const TEAM_COMMISSION_RELEASED = true;
 
 function json(data: unknown, status = 200, headers: HeadersInit = {}) {
   return new Response(JSON.stringify(data), {
@@ -539,9 +540,34 @@ async function handle(req: Request): Promise<Response> {
     const method = typeof body.method === "string" && body.method.trim() ? body.method.trim() : "CBE";
     if (accountName.length < 2) return json({ error: "Enter account holder name." }, 400);
     if (!/^\d{8,18}$/.test(accountNumber)) return json({ error: "Account number must be 8–18 digits." }, 400);
-    const { error } = await db.from("users").update({ bank_account_name: accountName, bank_account_number: accountNumber, bank_method: method }).eq("id", auth.userId);
-    if (error) throw error;
-    return json({ ok: true, bankAccount: { accountName, accountNumber, method } });
+    const { data: savedAccount, error: savedAccountError } = await db.from("users")
+      .select("bank_account_name,bank_account_number,bank_method")
+      .eq("id", auth.userId).maybeSingle();
+    if (savedAccountError) throw savedAccountError;
+    if (!savedAccount) return json({ error: "Customer account not found." }, 404);
+    const alreadySaved = Boolean(savedAccount.bank_account_name || savedAccount.bank_account_number);
+    if (alreadySaved) {
+      const sameAccount =
+        savedAccount.bank_account_name === accountName &&
+        savedAccount.bank_account_number === accountNumber &&
+        String(savedAccount.bank_method || "CBE").toLowerCase() === method.toLowerCase();
+      if (!sameAccount) {
+        return json({ error: "Bank account details are locked after the first save. Contact ZENTRO support for a controlled review." }, 409);
+      }
+      return json({ ok: true, bankAccount: { accountName, accountNumber, method }, locked: true });
+    }
+    const { error } = await db.from("users").update({
+      bank_account_name: accountName,
+      bank_account_number: accountNumber,
+      bank_method: method
+    }).eq("id", auth.userId);
+    if (error) {
+      if (String(error.code || "") === "23514") {
+        return json({ error: "Bank account details are locked after the first save. Contact ZENTRO support for a controlled review." }, 409);
+      }
+      throw error;
+    }
+    return json({ ok: true, bankAccount: { accountName, accountNumber, method }, locked: true });
   }
 
   if (method === "POST" && route === "/deposits") {
@@ -1098,6 +1124,18 @@ async function handle(req: Request): Promise<Response> {
       }
       row.commission_base = body.commissionBase;
     }
+    if (["level1CommissionPercent", "level2CommissionPercent", "level3CommissionPercent"].some((key) => body[key] !== undefined)) {
+      const current = await getPaymentSettings();
+      const rates = [
+        Number(body.level1CommissionPercent ?? current.level1CommissionPercent),
+        Number(body.level2CommissionPercent ?? current.level2CommissionPercent),
+        Number(body.level3CommissionPercent ?? current.level3CommissionPercent)
+      ];
+      if (rates.some((rate) => !Number.isFinite(rate) || rate < 0 || rate > 100) ||
+          rates.reduce((total, rate) => total + rate, 0) > 100) {
+        return json({ error: "The combined three-level commission rate cannot exceed 100% of a verified deposit." }, 400);
+      }
+    }
     if (body.enforceWithdrawalHours !== undefined) {
       if (typeof body.enforceWithdrawalHours !== "boolean") return json({ error: "Invalid withdrawal schedule setting." }, 400);
       row.enforce_withdrawal_hours = body.enforceWithdrawalHours;
@@ -1221,7 +1259,7 @@ async function handle(req: Request): Promise<Response> {
   }
 
   if (method === "POST" && route === "/gift-code") {
-    if (!REWARD_CLAIMS_RELEASED) return json({ error: "Gift code redemption is not released yet." }, 503);
+    if (!GIFT_CODE_REDEMPTION_RELEASED) return json({ error: "Gift code redemption is not released yet." }, 503);
     const auth = await getAuth(req);
     if (!auth) return json({ error: "Authentication required." }, 401);
     if (auth.role !== "customer") return json({ error: "Customer account required." }, 403);
