@@ -834,7 +834,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     Withdrawal Requests
                   </h1>
                   <p className="text-xs sm:text-sm text-slate-600">
-                    Review customer payout accounts, approve, mark processed, or reject with refund
+                    Review payout accounts. Approve first, send the bank transfer manually, then confirm payment here.
                   </p>
                 </div>
                 <div className="flex items-center gap-1 p-1 rounded-xl bg-slate-100">
@@ -935,16 +935,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           >
                             Mark Processed / Completed
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setRejectWdTarget(wd);
-                              setRejectWdReason('');
-                            }}
-                            className="min-h-[38px] px-4 rounded-xl border border-red-200 bg-red-50 hover:bg-red-100 text-red-700 text-xs font-semibold cursor-pointer"
-                          >
-                            Reject &amp; Refund
-                          </button>
+                          {wd.status === 'Pending' && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setRejectWdTarget(wd);
+                                setRejectWdReason('');
+                              }}
+                              className="min-h-[38px] px-4 rounded-xl border border-red-200 bg-red-50 hover:bg-red-100 text-red-700 text-xs font-semibold cursor-pointer"
+                            >
+                              Reject &amp; Refund
+                            </button>
+                          )}
                         </div>
                       )}
                     </article>
