@@ -90,8 +90,10 @@ export interface PurchasedPlanRecord {
   investmentEtb: number;
   dailyIncomeEtb: number;
   cycleDays: number;
+  claimedDays: number;
   purchaseDate: string;
   nextCycleAt: number;
+  expiresAtMs: number;
   status: string;
 }
 
