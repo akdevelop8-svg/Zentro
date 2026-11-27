@@ -6,6 +6,7 @@ import {
   ClipboardList,
   CreditCard,
   Eye,
+  Gift,
   LayoutDashboard,
   LogOut,
   Megaphone,
@@ -24,6 +25,8 @@ import {
   apiAdminApproveWithdrawal,
   apiAdminAuditLogs,
   apiAdminBroadcasts,
+  apiAdminCreateGiftCode,
+  apiAdminGiftCodes,
   apiAdminCustomerDetail,
   apiAdminCustomers,
   apiAdminDeposits,
@@ -33,6 +36,7 @@ import {
   apiAdminProcessWithdrawal,
   apiAdminRejectDeposit,
   apiAdminRejectWithdrawal,
+  apiAdminRevokeGiftCode,
   apiAdminReplyFeedback,
   apiAdminSendBroadcast,
   apiAdminToggleCustomerStatus,
@@ -52,6 +56,7 @@ import {
   BroadcastItem,
   DepositRequestItem,
   FeedbackItem,
+  GiftCodeItem,
   PaymentMethodConfig,
   PaymentSettings,
   WithdrawalRequestItem,
@@ -75,6 +80,7 @@ const ADMIN_NAV: {
   { id: 'feedback', label: 'Feedback & Complaints', icon: MessageSquareWarning },
   { id: 'broadcasts', label: 'Broadcast Messages', icon: Megaphone },
   { id: 'payment_settings', label: 'Payment Settings', icon: CreditCard },
+  { id: 'rewards', label: 'Gift Codes & Rewards', icon: Gift },
   { id: 'audit', label: 'Admin Activity / Audit Log', icon: ClipboardList },
 ];
 
@@ -119,6 +125,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [broadcastTargetUserId, setBroadcastTargetUserId] = useState('');
 
   const [paymentDraft, setPaymentDraft] = useState<PaymentSettings | null>(null);
+  const [giftCodes, setGiftCodes] = useState<GiftCodeItem[]>([]);
+  const [giftAmount, setGiftAmount] = useState('50');
+  const [giftMaxRedemptions, setGiftMaxRedemptions] = useState('1');
+  const [giftExpiry, setGiftExpiry] = useState('');
+  const [giftCreating, setGiftCreating] = useState(false);
+  const [issuedGiftCode, setIssuedGiftCode] = useState<string | null>(null);
   const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]);
 
   const showNotice = (ok: boolean, text: string) => {
@@ -128,12 +140,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const loadAllAdminData = useCallback(async () => {
     try {
-      const [ov, custRes, fbRes, brdRes, audRes, financeRes] = await Promise.all([
+      const [ov, custRes, fbRes, brdRes, audRes, giftRes, financeRes] = await Promise.all([
         apiAdminOverview(),
         apiAdminCustomers(customerQuery, statusFilter),
         apiAdminFeedback(),
         apiAdminBroadcasts(),
         apiAdminAuditLogs(),
+        apiAdminGiftCodes(),
         BANK_TRANSFER_FEATURES_ENABLED
           ? Promise.all([apiAdminDeposits(), apiAdminWithdrawals(), apiAdminGetPaymentSettings()])
           : Promise.resolve(null),
@@ -145,6 +158,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       setFeedbackList(fbRes.feedback);
       setBroadcasts(brdRes.broadcasts);
       setPaymentDraft(financeRes?.[2] ?? null);
+      setGiftCodes(giftRes.giftCodes);
       setAuditLogs(audRes.auditLogs);
     } catch (err) {
       showNotice(false, (err as Error).message);
@@ -363,6 +377,38 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       const saved = await apiAdminUpdatePaymentSettings(paymentDraft);
       setPaymentDraft(saved);
       showNotice(true, 'Payment settings saved and logged.');
+      await loadAllAdminData();
+    } catch (err) {
+      showNotice(false, (err as Error).message);
+    }
+  };
+
+  const handleCreateGiftCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setGiftCreating(true);
+    setIssuedGiftCode(null);
+    try {
+      const result = await apiAdminCreateGiftCode({
+        amountEtb: Number(giftAmount),
+        maxRedemptions: Number(giftMaxRedemptions),
+        expiresAt: giftExpiry ? new Date(giftExpiry).toISOString() : null,
+      });
+      setIssuedGiftCode(result.giftCode.code);
+      showNotice(true, 'Gift code created. Keep it private until redemption is released.');
+      await loadAllAdminData();
+    } catch (err) {
+      showNotice(false, (err as Error).message);
+    } finally {
+      setGiftCreating(false);
+    }
+  };
+
+  const handleRevokeGiftCode = async (gift: GiftCodeItem) => {
+    if (gift.status !== 'Active') return;
+    if (!window.confirm(`Revoke gift code ${gift.code}? This cannot be undone.`)) return;
+    try {
+      await apiAdminRevokeGiftCode(gift.code);
+      showNotice(true, `Gift code ${gift.code} revoked.`);
       await loadAllAdminData();
     } catch (err) {
       showNotice(false, (err as Error).message);
@@ -1568,6 +1614,78 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           )}
 
           {/* 8. ADMIN ACTIVITY / AUDIT LOG */}
+          {section === 'rewards' && (
+            <section className="space-y-5">
+              <div>
+                <h1 className="font-display text-2xl font-bold text-slate-950">Gift Codes &amp; Rewards</h1>
+                <p className="text-xs sm:text-sm text-slate-600">Create controlled gift codes and review their redemption limits</p>
+              </div>
+
+              <div className="rounded-2xl border border-amber-200 bg-amber-50/70 p-4 space-y-2">
+                <p className="text-sm font-semibold text-slate-950">Redemption is not released yet</p>
+                <p className="text-xs text-slate-700">Codes can be prepared and managed here, but customer redemption remains locked until the wallet-credit flow completes its release checks. Do not distribute codes yet.</p>
+              </div>
+
+              <form onSubmit={handleCreateGiftCode} className="rounded-2xl border border-slate-200 bg-white p-5 space-y-4">
+                <h2 className="font-display text-base font-bold text-slate-950">Create Gift Code</h2>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <label className="space-y-1 text-xs font-semibold text-slate-700">
+                    <span>Credit Amount (ETB)</span>
+                    <input type="number" min="0.01" max="1000000" step="0.01" required value={giftAmount} onChange={(e) => setGiftAmount(e.target.value)} className="w-full min-h-[42px] rounded-xl border border-slate-200 px-3 font-mono" />
+                  </label>
+                  <label className="space-y-1 text-xs font-semibold text-slate-700">
+                    <span>Maximum Redemptions</span>
+                    <input type="number" min="1" max="10000" step="1" required value={giftMaxRedemptions} onChange={(e) => setGiftMaxRedemptions(e.target.value)} className="w-full min-h-[42px] rounded-xl border border-slate-200 px-3 font-mono" />
+                  </label>
+                  <label className="space-y-1 text-xs font-semibold text-slate-700">
+                    <span>Expiry (optional)</span>
+                    <input type="datetime-local" value={giftExpiry} onChange={(e) => setGiftExpiry(e.target.value)} className="w-full min-h-[42px] rounded-xl border border-slate-200 px-3 text-xs" />
+                  </label>
+                </div>
+                <button type="submit" disabled={giftCreating} className="min-h-[44px] rounded-xl bg-blue-700 px-5 text-sm font-semibold text-white disabled:opacity-60">
+                  {giftCreating ? 'Creating...' : 'Generate Gift Code'}
+                </button>
+                {issuedGiftCode && (
+                  <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <p className="text-[11px] font-semibold text-emerald-800">New code (not for distribution yet)</p>
+                      <p className="font-mono text-lg font-bold tracking-wider text-slate-950">{issuedGiftCode}</p>
+                    </div>
+                    <button type="button" onClick={() => navigator.clipboard?.writeText(issuedGiftCode)} className="min-h-[38px] rounded-lg border border-emerald-300 bg-white px-3 text-xs font-semibold text-emerald-800">Copy code</button>
+                  </div>
+                )}
+              </form>
+
+              <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
+                <div className="border-b border-slate-100 bg-slate-50 px-4 py-3 flex items-center justify-between">
+                  <h2 className="font-display text-base font-bold text-slate-950">Issued Gift Codes</h2>
+                  <span className="text-xs text-slate-500">{giftCodes.length} total</span>
+                </div>
+                {giftCodes.length === 0 ? (
+                  <p className="p-6 text-center text-xs text-slate-500">No gift codes have been created.</p>
+                ) : (
+                  <div className="divide-y divide-slate-100">
+                    {giftCodes.map((gift) => (
+                      <div key={gift.code} className="p-4 flex flex-wrap items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="font-mono font-bold text-slate-950">{gift.code}</p>
+                          <p className="text-xs text-slate-600">{gift.amountEtb.toLocaleString()} ETB · {gift.redemptionCount}/{gift.maxRedemptions} uses · {gift.status}</p>
+                          <p className="text-[11px] text-slate-500">Expiry: {gift.expiresAt ? new Date(gift.expiresAt).toLocaleString() : 'No expiry'}</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button type="button" onClick={() => navigator.clipboard?.writeText(gift.code)} className="min-h-[38px] rounded-lg border border-slate-200 px-3 text-xs font-semibold">Copy</button>
+                          {gift.status === 'Active' && (
+                            <button type="button" onClick={() => handleRevokeGiftCode(gift)} className="min-h-[38px] rounded-lg border border-red-200 px-3 text-xs font-semibold text-red-700">Revoke</button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </section>
+          )}
+
           {section === 'audit' && (
             <section className="space-y-4">
               <div>
