@@ -488,10 +488,6 @@ begin
     return jsonb_build_object('ok', false, 'error', 'Your Welfare vault has not reached maturity yet');
   end if;
 
-  if v_enrollment.claimed_days < v_enrollment.duration_days then
-    return jsonb_build_object('ok', false, 'error', 'Complete all daily Welfare claims before releasing the vault');
-  end if;
-
   v_release := v_enrollment.accumulated_etb;
   if v_release <= 0 then
     return jsonb_build_object('ok', false, 'error', 'There is no accumulated Welfare amount to release');
