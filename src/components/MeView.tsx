@@ -234,7 +234,7 @@ export const MeView: React.FC<MeViewProps> = ({
         </div>
       </section>
 
-      {FINANCIAL_FEATURES_ENABLED && (
+      {FINANCIAL_FEATURES_ENABLED && settings.dailyCheckInEtb > 0 && (
         <section
         aria-label="Daily Check-in"
         className="rounded-2xl border border-amber-200 bg-white p-4 shadow-xs space-y-3"
