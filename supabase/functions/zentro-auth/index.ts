@@ -528,7 +528,7 @@ async function handle(req: Request): Promise<Response> {
     const paymentMethodId = typeof body.paymentMethodId === "string" ? body.paymentMethodId.trim() : "";
     const receiptDataUrl = typeof body.receiptDataUrl === "string" ? body.receiptDataUrl : "";
     const settings = await getPaymentSettings();
-    if (!Number.isFinite(amountEtb) || amountEtb < settings.minRechargeEtb || amountEtb > 1000000) return json({ error: "Deposit amount is below the minimum or above the allowed limit." }, 400);
+    if (!Number.isFinite(amountEtb) || Math.abs(amountEtb * 100 - Math.round(amountEtb * 100)) > 0.000001 || amountEtb < settings.minRechargeEtb || amountEtb > 1000000) return json({ error: "Deposit amount must use at most 2 decimal places and be within the allowed limit." }, 400);
     if (!/^[A-Z0-9-]{5,64}$/.test(referenceCode)) return json({ error: "Enter a valid bank transaction reference." }, 400);
     const methods = settings.depositMethods as Array<Record<string, unknown>>;
     const selected = methods.find((m) => m.id === paymentMethodId && m.enabled === true);
@@ -568,7 +568,7 @@ async function handle(req: Request): Promise<Response> {
     const amountEtb = Number(body.amountEtb);
     const paymentMethodId = typeof body.paymentMethodId === "string" ? body.paymentMethodId.trim() : "";
     const settings = await getPaymentSettings();
-    if (!Number.isFinite(amountEtb) || amountEtb < settings.minWithdrawalEtb || amountEtb > 1000000) return json({ error: "Withdrawal amount is below the minimum or above the allowed limit." }, 400);
+    if (!Number.isFinite(amountEtb) || Math.abs(amountEtb * 100 - Math.round(amountEtb * 100)) > 0.000001 || amountEtb < settings.minWithdrawalEtb || amountEtb > 1000000) return json({ error: "Withdrawal amount must use at most 2 decimal places and be within the allowed limit." }, 400);
     if (!Number.isFinite(settings.withdrawalFeePercent) || settings.withdrawalFeePercent < 0 || settings.withdrawalFeePercent >= 100) return json({ error: "Withdrawal fee settings are invalid. Contact Admin." }, 503);
     if (settings.enforceWithdrawalHours) {
       const hour = Number(new Intl.DateTimeFormat("en-US", { timeZone: "Africa/Addis_Ababa", hour: "2-digit", hourCycle: "h23" }).format(new Date()));
