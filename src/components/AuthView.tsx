@@ -346,11 +346,11 @@ export const AuthView: React.FC<AuthViewProps> = ({
                   htmlFor="reg-invite"
                   className="block text-xs font-semibold text-slate-800 mb-1"
                 >
-                  Invitation Code{' '}
+                  Referral Code{' '}
                   <span className="font-normal text-slate-500">
                     {initialReferralCode
                       ? '(Auto-filled from referral link)'
-                      : '(Optional)'}
+                      : '(Optional — not required to register)'}
                   </span>
                 </label>
                 <div className="relative">
