@@ -16,6 +16,7 @@ import {
   WelfareEnrollmentRecord,
 } from '../types/zentro';
 import {
+  calculateTotalProfitEtb,
   formatCountdown,
   formatMultiDayCountdown,
   getWelfareClaimState,
@@ -213,6 +214,13 @@ export const PurchasedView: React.FC<PurchasedViewProps> = ({
                         </div>
                       </div>
 
+                      <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 px-3 py-2.5 flex items-center justify-between gap-2">
+                        <span className="text-xs font-semibold text-emerald-900">Total Plan Profit</span>
+                        <span className="font-mono tabular-nums text-sm font-bold text-emerald-800">
+                          {calculateTotalProfitEtb(w.dailyAmountEtb, w.durationDays).toLocaleString()} ETB
+                        </span>
+                      </div>
+
                       {/* Maturity Lock Progress */}
                       {!isCompleted && (
                         <div className="space-y-1.5">
@@ -362,6 +370,9 @@ export const PurchasedView: React.FC<PurchasedViewProps> = ({
                           </span>
                           <span className="text-[11px] font-mono text-amber-700 font-semibold">
                             +{rec.dailyIncomeEtb.toLocaleString()} ETB/day
+                          </span>
+                          <span className="block text-[11px] font-mono text-emerald-700 font-semibold mt-1">
+                            Total Profit: {calculateTotalProfitEtb(rec.dailyIncomeEtb, rec.cycleDays).toLocaleString()} ETB
                           </span>
                         </div>
                       </div>
