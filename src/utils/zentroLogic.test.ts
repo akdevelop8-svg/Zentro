@@ -169,7 +169,21 @@ test('getWelfareClaimState locks accumulated savings until maturity day and enfo
     status: 'Active',
   };
 
-  // Within first 24h: Day 1 of 5, cannot claim again, cannot release to wallet early
+  // A newly activated Welfare plan cannot be claimed immediately.
+  const firstClaimNotDue = getWelfareClaimState(
+    { ...enrollment, claimedDays: 0, accumulatedEtb: 0, lastClaimAtMs: null },
+    start + 23 * 3600_000
+  );
+  assert.equal(firstClaimNotDue.canClaimDaily, false);
+  assert.equal(firstClaimNotDue.nextClaimRemainingSeconds, 3600);
+
+  const firstClaimDue = getWelfareClaimState(
+    { ...enrollment, claimedDays: 0, accumulatedEtb: 0, lastClaimAtMs: null },
+    start + 24 * 3600_000
+  );
+  assert.equal(firstClaimDue.canClaimDaily, true);
+
+  // Within first 24h after the first successful claim: cannot claim again.
   const within24h = getWelfareClaimState(enrollment, start + 3600_000);
   assert.equal(within24h.currentDay, 1);
   assert.equal(within24h.canClaimDaily, false);
