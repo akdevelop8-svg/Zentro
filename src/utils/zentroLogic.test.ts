@@ -197,9 +197,15 @@ test('getWelfareClaimState locks accumulated savings until maturity day and enfo
   assert.equal(day2.canClaimDaily, true);
   assert.equal(day2.canReleaseToWallet, false);
 
-  // Day 5 maturity reached: Day 5 of 5, accumulated savings can safely release to main wallet
-  const matured = getWelfareClaimState(enrollment, start + fiveDaysMs);
-  assert.equal(matured.currentDay, 5);
-  assert.equal(matured.isMatured, true);
-  assert.equal(matured.canReleaseToWallet, true);
+  // Maturity reached, but the final daily claims must be completed before vault release.
+  const maturedWithClaimsRemaining = getWelfareClaimState(enrollment, start + fiveDaysMs);
+  assert.equal(maturedWithClaimsRemaining.currentDay, 5);
+  assert.equal(maturedWithClaimsRemaining.isMatured, true);
+  assert.equal(maturedWithClaimsRemaining.canReleaseToWallet, false);
+
+  const allClaimsComplete = getWelfareClaimState(
+    { ...enrollment, claimedDays: 5, accumulatedEtb: 5000 },
+    start + fiveDaysMs
+  );
+  assert.equal(allClaimsComplete.canReleaseToWallet, true);
 });
