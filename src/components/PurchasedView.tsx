@@ -265,9 +265,7 @@ export const PurchasedView: React.FC<PurchasedViewProps> = ({
 
                       {!isCompleted ? (
                         <div className="flex flex-col sm:flex-row gap-2">
-                          {!FINANCIAL_FEATURES_ENABLED ? (
-                            <p className="flex-1 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs font-medium text-amber-900">Daily claims are paused until the official release.</p>
-                          ) : state.canClaimDaily ? (
+                          {FINANCIAL_FEATURES_ENABLED && state.canClaimDaily ? (
                             <button
                               type="button"
                               disabled={busyId === w.id}
