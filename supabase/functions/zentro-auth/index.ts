@@ -517,6 +517,90 @@ async function handle(req: Request): Promise<Response> {
     if (error) throw error;
     return json({ ok: true, bankAccount: { accountName, accountNumber, method } });
   }
+
+  if (method === "POST" && route === "/deposits") {
+    const auth = await getAuth(req);
+    if (!auth) return json({ error: "Authentication required." }, 401);
+    if (auth.role !== "customer") return json({ error: "Customer account required." }, 403);
+    const body = await req.json().catch(() => ({}));
+    const amountEtb = Number(body.amountEtb);
+    const referenceCode = typeof body.referenceCode === "string" ? body.referenceCode.trim().toUpperCase() : "";
+    const paymentMethodId = typeof body.paymentMethodId === "string" ? body.paymentMethodId.trim() : "";
+    const receiptDataUrl = typeof body.receiptDataUrl === "string" ? body.receiptDataUrl : "";
+    const settings = await getPaymentSettings();
+    if (!Number.isFinite(amountEtb) || amountEtb < settings.minRechargeEtb || amountEtb > 1000000) return json({ error: "Deposit amount is below the minimum or above the allowed limit." }, 400);
+    if (!/^[A-Z0-9-]{5,64}$/.test(referenceCode)) return json({ error: "Enter a valid bank transaction reference." }, 400);
+    const methods = settings.depositMethods as Array<Record<string, unknown>>;
+    const selected = methods.find((m) => m.id === paymentMethodId && m.enabled === true);
+    if (!selected) return json({ error: "This deposit method is unavailable. Contact Admin." }, 400);
+    const receipt = decodeImageDataUrl(receiptDataUrl);
+    if (!receipt.ok) return json({ error: receipt.error }, receipt.status);
+    const receiptFilename = crypto.randomUUID() + "." + receipt.extension;
+    const { error: uploadError } = await db.storage.from("zentro-deposits").upload(receiptFilename, receipt.bytes, {
+      contentType: receipt.mime, cacheControl: "3600", upsert: false
+    });
+    if (uploadError) throw uploadError;
+    const id = "dep-" + crypto.randomUUID().slice(0, 12);
+    const { error } = await db.from("deposit_requests").insert({
+      id, user_id: auth.userId, amount_etb: amountEtb, reference_code: referenceCode,
+      payment_method_id: paymentMethodId, payment_method_name: String(selected.methodName),
+      account_name: String(selected.accountName), account_number: String(selected.accountNumber),
+      receipt_filename: receiptFilename, status: "Pending"
+    });
+    if (error) {
+      await db.storage.from("zentro-deposits").remove([receiptFilename]);
+      if (error.code === "23505") return json({ error: "This bank reference has already been submitted." }, 409);
+      throw error;
+    }
+    await db.from("notifications").insert({
+      id: "ntf-" + crypto.randomUUID().slice(0, 12), user_id: auth.userId,
+      title: "Deposit request received", message: "Your deposit request for " + amountEtb + " ETB is pending Admin verification.",
+      type: "info", is_read: false
+    });
+    return json({ ok: true, id }, 201);
+  }
+
+  if (method === "POST" && route === "/withdrawals") {
+    const auth = await getAuth(req);
+    if (!auth) return json({ error: "Authentication required." }, 401);
+    if (auth.role !== "customer") return json({ error: "Customer account required." }, 403);
+    const body = await req.json().catch(() => ({}));
+    const amountEtb = Number(body.amountEtb);
+    const paymentMethodId = typeof body.paymentMethodId === "string" ? body.paymentMethodId.trim() : "";
+    const settings = await getPaymentSettings();
+    if (!Number.isFinite(amountEtb) || amountEtb < settings.minWithdrawalEtb || amountEtb > 1000000) return json({ error: "Withdrawal amount is below the minimum or above the allowed limit." }, 400);
+    if (!Number.isFinite(settings.withdrawalFeePercent) || settings.withdrawalFeePercent < 0 || settings.withdrawalFeePercent >= 100) return json({ error: "Withdrawal fee settings are invalid. Contact Admin." }, 503);
+    if (settings.enforceWithdrawalHours) {
+      const hour = Number(new Intl.DateTimeFormat("en-US", { timeZone: "Africa/Addis_Ababa", hour: "2-digit", hourCycle: "h23" }).format(new Date()));
+      const inWindow = settings.withdrawalStartHour <= settings.withdrawalEndHour
+        ? hour >= settings.withdrawalStartHour && hour < settings.withdrawalEndHour
+        : hour >= settings.withdrawalStartHour || hour < settings.withdrawalEndHour;
+      if (!inWindow) return json({ error: settings.withdrawalScheduleNote || "Withdrawals are currently outside the processing window." }, 400);
+    }
+    const { data: user, error: userError } = await db.from("users")
+      .select("bank_account_name,bank_account_number,bank_method,status")
+      .eq("id", auth.userId).eq("role", "customer").maybeSingle();
+    if (userError) throw userError;
+    if (!user || user.status !== "Active") return json({ error: "Active customer account not found." }, 404);
+    if (!user.bank_account_name || !user.bank_account_number) return json({ error: "Save your bank account details before requesting a withdrawal." }, 400);
+    const methods = settings.withdrawalMethods as Array<Record<string, unknown>>;
+    const selected = methods.find((m) => m.id === paymentMethodId && m.enabled === true);
+    if (!selected || String(selected.methodName).toLowerCase() !== String(user.bank_method || "").toLowerCase()) return json({ error: "Choose the enabled bank method saved on your account." }, 400);
+    const feeEtb = Number((amountEtb * settings.withdrawalFeePercent / 100).toFixed(2));
+    const netAmountEtb = Number((amountEtb - feeEtb).toFixed(2));
+    const id = "wd-" + crypto.randomUUID().slice(0, 12);
+    const { data: newBalance, error } = await db.rpc("zentro_request_withdrawal", {
+      p_user_id: auth.userId, p_id: id, p_amount: amountEtb, p_fee: feeEtb, p_net: netAmountEtb,
+      p_method_id: paymentMethodId, p_method_name: String(selected.methodName),
+      p_account_name: user.bank_account_name, p_account_number: user.bank_account_number
+    });
+    if (error) {
+      if (String(error.message || "").includes("Insufficient wallet balance")) return json({ error: "Insufficient wallet balance." }, 400);
+      throw error;
+    }
+    return json({ ok: true, id, walletBalanceEtb: Number(newBalance) }, 201);
+  }
+
   if (method === "POST" && route === "/notifications/read") {
     const auth = await getAuth(req);
     if (!auth) return json({ error: "Authentication required." }, 401);
@@ -722,6 +806,44 @@ async function handle(req: Request): Promise<Response> {
     }) });
   }
 
+
+  const depositActionMatch = route.match(/^\\/admin\\/deposits\\/([^/]+)\\/(approve|reject)$/);
+  if (method === "POST" && depositActionMatch) {
+    const depositId = decodeURIComponent(depositActionMatch[1]);
+    if (depositActionMatch[2] === "approve") {
+      const { error } = await db.rpc("zentro_approve_deposit", { p_deposit_id: depositId, p_admin: adminUsername() });
+      if (error) throw error;
+      return json({ ok: true });
+    }
+    const body = await req.json().catch(() => ({}));
+    const reason = typeof body.reason === "string" ? body.reason.trim() : "";
+    if (reason.length < 3 || reason.length > 500) return json({ error: "Enter a rejection reason (3–500 characters)." }, 400);
+    const { error } = await db.rpc("zentro_reject_deposit", { p_deposit_id: depositId, p_admin: adminUsername(), p_reason: reason });
+    if (error) throw error;
+    return json({ ok: true });
+  }
+
+  const withdrawalActionMatch = route.match(/^\\/admin\\/withdrawals\\/([^/]+)\\/(approve|reject|process)$/);
+  if (method === "POST" && withdrawalActionMatch) {
+    const withdrawalId = decodeURIComponent(withdrawalActionMatch[1]);
+    if (withdrawalActionMatch[2] === "approve") {
+      const { error } = await db.rpc("zentro_approve_withdrawal", { p_withdrawal_id: withdrawalId, p_admin: adminUsername() });
+      if (error) throw error;
+      return json({ ok: true });
+    }
+    if (withdrawalActionMatch[2] === "process") {
+      const { error } = await db.rpc("zentro_process_withdrawal", { p_withdrawal_id: withdrawalId, p_admin: adminUsername() });
+      if (error) throw error;
+      return json({ ok: true });
+    }
+    const body = await req.json().catch(() => ({}));
+    const reason = typeof body.reason === "string" ? body.reason.trim() : "";
+    if (reason.length < 3 || reason.length > 500) return json({ error: "Enter a rejection reason (3–500 characters)." }, 400);
+    const { error } = await db.rpc("zentro_reject_withdrawal", { p_withdrawal_id: withdrawalId, p_admin: adminUsername(), p_reason: reason });
+    if (error) throw error;
+    return json({ ok: true });
+  }
+
   if (method === "GET" && route === "/admin/feedback") {
     const [feedback, customers] = await Promise.all([
       db.from("feedback_messages").select("*").order("created_at", { ascending: false }).limit(500),
@@ -834,39 +956,55 @@ async function handle(req: Request): Promise<Response> {
   }
 
   if (method === "PUT" && route === "/admin/payment-settings") {
-    return json({ error: "Financial settings cannot be activated in this release." }, 503);
     const body = await req.json().catch(() => ({}));
-    const numericFields = [
-      "withdrawalStartHour", "withdrawalEndHour", "minWithdrawalEtb", "minRechargeEtb",
-      "withdrawalFeePercent", "registrationBonusEtb", "dailyCheckInEtb",
-      "level1CommissionPercent", "level2CommissionPercent", "level3CommissionPercent"
-    ];
     const row: Record<string, unknown> = { id: "default", updated_at: new Date().toISOString() };
-    const mapping: Record<string, string> = {
-      depositMethods: "deposit_methods_json", withdrawalMethods: "withdrawal_methods_json",
-      withdrawalStartHour: "withdrawal_start_hour", withdrawalEndHour: "withdrawal_end_hour",
-      enforceWithdrawalHours: "enforce_withdrawal_hours", withdrawalScheduleNote: "withdrawal_schedule_note",
-      minWithdrawalEtb: "min_withdrawal_etb", minRechargeEtb: "min_recharge_etb",
-      withdrawalFeePercent: "withdrawal_fee_percent", registrationBonusEtb: "registration_bonus_etb",
-      dailyCheckInEtb: "daily_check_in_etb", level1CommissionPercent: "level1_commission_percent",
-      level2CommissionPercent: "level2_commission_percent", level3CommissionPercent: "level3_commission_percent"
-    };
-    for (const [key, column] of Object.entries(mapping)) {
+    for (const key of ["depositMethods", "withdrawalMethods"] as const) {
       if (body[key] === undefined) continue;
-      if (key === "depositMethods" || key === "withdrawalMethods") {
-        if (!Array.isArray(body[key])) return json({ error: "Payment methods must be arrays." }, 400);
-        row[column] = body[key];
-      } else if (numericFields.includes(key)) {
-        const value = Number(body[key]);
-        if (!Number.isFinite(value) || value < 0) return json({ error: "Invalid payment setting: " + key }, 400);
-        row[column] = value;
-      } else {
-        row[column] = body[key];
+      if (!Array.isArray(body[key]) || body[key].length > 10) return json({ error: "Payment methods must be arrays with at most 10 entries." }, 400);
+      const normalized = [];
+      for (const method of body[key]) {
+        if (!method || typeof method !== "object") return json({ error: "Invalid payment method." }, 400);
+        const id = typeof method.id === "string" ? method.id.trim() : "";
+        const methodName = typeof method.methodName === "string" ? method.methodName.trim() : "";
+        const accountName = typeof method.accountName === "string" ? method.accountName.trim() : "";
+        const accountNumber = typeof method.accountNumber === "string" ? method.accountNumber.replace(/\\s+/g, "") : "";
+        if (!/^[a-zA-Z0-9_-]{2,40}$/.test(id) || !methodName || methodName.length > 60 ||
+            accountName.length < 2 || accountName.length > 100 || !accountNumber || accountNumber.length > 40 ||
+            typeof method.enabled !== "boolean") return json({ error: "Complete each bank method with a valid name, account details, and enabled status." }, 400);
+        if (key === "depositMethods" && method.enabled && !/^\\d{8,18}$/.test(accountNumber)) return json({ error: "Deposit account numbers must contain 8–18 digits." }, 400);
+        normalized.push({ id, methodName, accountName, accountNumber, enabled: method.enabled });
       }
+      row[key === "depositMethods" ? "deposit_methods_json" : "withdrawal_methods_json"] = normalized;
     }
-    // No payment endpoint is enabled by changing settings; this only stores configuration.
+    const numericMap: Record<string, string> = {
+      withdrawalStartHour: "withdrawal_start_hour", withdrawalEndHour: "withdrawal_end_hour",
+      minWithdrawalEtb: "min_withdrawal_etb", minRechargeEtb: "min_recharge_etb",
+      withdrawalFeePercent: "withdrawal_fee_percent"
+    };
+    for (const [key, column] of Object.entries(numericMap)) {
+      if (body[key] === undefined) continue;
+      const value = Number(body[key]);
+      if (!Number.isFinite(value) || value < 0) return json({ error: "Invalid payment setting: " + key }, 400);
+      if ((key === "withdrawalStartHour" || key === "withdrawalEndHour") && (!Number.isInteger(value) || value > 23)) return json({ error: "Withdrawal hours must be whole numbers from 0 to 23." }, 400);
+      if ((key === "minWithdrawalEtb" || key === "minRechargeEtb") && value <= 0) return json({ error: "Minimum deposit and withdrawal amounts must be positive." }, 400);
+      if (key === "withdrawalFeePercent" && value >= 100) return json({ error: "Withdrawal fee must be below 100%." }, 400);
+      row[column] = value;
+    }
+    if (body.enforceWithdrawalHours !== undefined) {
+      if (typeof body.enforceWithdrawalHours !== "boolean") return json({ error: "Invalid withdrawal schedule setting." }, 400);
+      row.enforce_withdrawal_hours = body.enforceWithdrawalHours;
+    }
+    if (body.withdrawalScheduleNote !== undefined) {
+      if (typeof body.withdrawalScheduleNote !== "string" || body.withdrawalScheduleNote.length > 250) return json({ error: "Withdrawal schedule note is too long." }, 400);
+      row.withdrawal_schedule_note = body.withdrawalScheduleNote.trim();
+    }
     const { error } = await db.from("payment_settings").upsert(row, { onConflict: "id" });
     if (error) throw error;
+    await db.from("audit_logs").insert({
+      id: "aud-" + crypto.randomUUID().slice(0, 12), actor: adminUsername(),
+      action: "Bank payment settings updated", target: "payment_settings",
+      details: "Updated bank deposit/withdrawal methods and limits; reward and commission settings unchanged"
+    });
     return json(await getPaymentSettings());
   }
 
@@ -883,8 +1021,7 @@ async function handle(req: Request): Promise<Response> {
   if (
     route === "/me/check-in" || route === "/gift-code" ||
     route === "/plans/buy" || route.startsWith("/plans/") ||
-    route.startsWith("/welfare/") || route === "/deposits" || route === "/withdrawals" ||
-    /^\/admin\/(deposits|withdrawals)\/[^/]+\/(approve|reject|process)$/.test(route)
+    route.startsWith("/welfare/")
   ) {
     return json({ error: "Financial functions are disabled in this release. No money will be accepted, credited, debited, or transferred." }, 503);
   }
@@ -895,12 +1032,20 @@ async function handle(req: Request): Promise<Response> {
     if (!auth) return json({ error: "Authentication required." }, 401);
     const filename = decodeURIComponent(uploadMatch[1]);
     if (!/^[a-f0-9-]{36}\.(?:jpg|png|webp)$/.test(filename)) return json({ error: "File not found." }, 404);
+    let bucket = "zentro-broadcasts";
     let visibleQuery = db.from("broadcast_messages").select("id").eq("image_filename", filename);
     if (auth.role !== "admin") visibleQuery = visibleQuery.or("target_user_id.is.null,target_user_id.eq." + auth.userId);
     const { data: visibleBroadcast, error: visibilityError } = await visibleQuery.limit(1).maybeSingle();
     if (visibilityError) throw visibilityError;
-    if (!visibleBroadcast) return json({ error: "File not found." }, 404);
-    const { data: file, error: downloadError } = await db.storage.from("zentro-broadcasts").download(filename);
+    if (!visibleBroadcast) {
+      let depositQuery = db.from("deposit_requests").select("id,user_id").eq("receipt_filename", filename);
+      if (auth.role !== "admin") depositQuery = depositQuery.eq("user_id", auth.userId);
+      const { data: visibleDeposit, error: depositVisibilityError } = await depositQuery.limit(1).maybeSingle();
+      if (depositVisibilityError) throw depositVisibilityError;
+      if (!visibleDeposit) return json({ error: "File not found." }, 404);
+      bucket = "zentro-deposits";
+    }
+    const { data: file, error: downloadError } = await db.storage.from(bucket).download(filename);
     if (downloadError || !file) return json({ error: "File not found." }, 404);
     const mime = file.type && ["image/jpeg","image/png","image/webp"].includes(file.type) ? file.type : "application/octet-stream";
     return new Response(file, {
