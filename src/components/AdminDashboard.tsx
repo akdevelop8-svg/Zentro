@@ -41,7 +41,6 @@ import {
   apiAdminWithdrawals,
   uploadImageUrl,
   BANK_TRANSFER_FEATURES_ENABLED,
-  BANK_TRANSFER_FEATURES_ENABLED,
 } from '../services/api';
 import {
   AdminCustomerDetailPayload,
