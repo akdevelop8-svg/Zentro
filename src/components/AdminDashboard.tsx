@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import {
   ArrowDownCircle,
   ArrowUpCircle,
+  Bell,
   Check,
   ClipboardList,
   CreditCard,
@@ -33,6 +34,8 @@ import {
   apiAdminFeedback,
   apiAdminGetPaymentSettings,
   apiAdminOverview,
+  apiAdminNotifications,
+  apiAdminMarkNotificationsRead,
   apiAdminProcessWithdrawal,
   apiAdminRejectDeposit,
   apiAdminRejectWithdrawal,
@@ -51,6 +54,7 @@ import {
   AdminCustomerDetailPayload,
   AdminCustomerSummary,
   AdminOverviewData,
+  AdminNotificationItem,
   AdminSection,
   AuditLogEntry,
   AuthSessionUser,
@@ -95,6 +99,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 }) => {
   const [section, setSection] = useState<AdminSection>('overview');
   const [bannerMsg, setBannerMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [adminNotifications, setAdminNotifications] = useState<AdminNotificationItem[]>([]);
+  const [unreadAdminNotificationCount, setUnreadAdminNotificationCount] = useState(0);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
 
   // Data state
   const [overview, setOverview] = useState<AdminOverviewData | null>(null);
@@ -137,6 +144,49 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const showNotice = (ok: boolean, text: string) => {
     setBannerMsg({ ok, text });
     window.setTimeout(() => setBannerMsg(null), 4000);
+  };
+  const loadAdminNotifications = useCallback(async () => {
+    const result = await apiAdminNotifications();
+    setAdminNotifications(result.notifications);
+    setUnreadAdminNotificationCount(result.unreadCount);
+  }, []);
+
+  useEffect(() => {
+    void loadAdminNotifications().catch(() => undefined);
+    const refreshId = window.setInterval(() => {
+      void loadAdminNotifications().catch(() => undefined);
+    }, 15000);
+    return () => window.clearInterval(refreshId);
+  }, [loadAdminNotifications]);
+
+  const handleOpenAdminNotification = async (notification: AdminNotificationItem) => {
+    try {
+      if (!notification.isRead) {
+        await apiAdminMarkNotificationsRead({ notificationIds: [notification.id] });
+        setAdminNotifications((current) => current.map((item) =>
+          item.id === notification.id ? { ...item, isRead: true } : item
+        ));
+        setUnreadAdminNotificationCount((current) => Math.max(0, current - 1));
+      }
+    } catch (err) {
+      showNotice(false, (err as Error).message);
+    }
+    setNotificationsOpen(false);
+    if (notification.targetSection === 'customers') {
+      setCustomerQuery(notification.customerName);
+    }
+    setSection(notification.targetSection);
+    void loadAdminNotifications().catch(() => undefined);
+  };
+
+  const handleMarkAllAdminNotificationsRead = async () => {
+    try {
+      await apiAdminMarkNotificationsRead({ markAll: true });
+      setAdminNotifications((current) => current.map((item) => ({ ...item, isRead: true })));
+      setUnreadAdminNotificationCount(0);
+    } catch (err) {
+      showNotice(false, (err as Error).message);
+    }
   };
 
   const loadAllAdminData = useCallback(async () => {
@@ -461,14 +511,89 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={onLogout}
-            className="min-h-[44px] px-4 rounded-xl border border-slate-200 hover:bg-slate-50 text-xs font-semibold text-slate-950 inline-flex items-center gap-2 cursor-pointer whitespace-nowrap shrink-0"
-          >
-            <LogOut className="h-4 w-4 text-slate-600" />
-            <span>Logout</span>
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            <div className="relative">
+              <button
+                type="button"
+                aria-label={`Admin notifications: ${unreadAdminNotificationCount} unread`}
+                aria-expanded={notificationsOpen}
+                onClick={() => {
+                  setNotificationsOpen((open) => !open);
+                  void loadAdminNotifications().catch(() => undefined);
+                }}
+                className="relative min-h-[44px] min-w-[44px] rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-800 inline-flex items-center justify-center cursor-pointer"
+              >
+                <Bell className="h-5 w-5" />
+                {unreadAdminNotificationCount > 0 && (
+                  <span className="absolute -right-1 -top-1 min-w-[19px] h-[19px] px-1 rounded-full bg-red-600 text-white text-[10px] font-bold leading-[19px] text-center shadow-sm">
+                    {unreadAdminNotificationCount > 99 ? '99+' : unreadAdminNotificationCount}
+                  </span>
+                )}
+              </button>
+              {notificationsOpen && (
+                <div className="absolute right-0 top-full mt-2 z-50 w-[min(88vw,370px)] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl">
+                  <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-3">
+                    <div>
+                      <h2 className="text-sm font-bold text-slate-950">Notifications</h2>
+                      <p className="text-[11px] text-slate-500">{unreadAdminNotificationCount} unread</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleMarkAllAdminNotificationsRead}
+                      disabled={unreadAdminNotificationCount === 0}
+                      className="text-[11px] font-semibold text-blue-700 hover:text-blue-900 disabled:text-slate-400 disabled:cursor-not-allowed"
+                    >
+                      Mark all read
+                    </button>
+                  </div>
+                  <div className="max-h-[min(65vh,420px)] overflow-y-auto">
+                    {adminNotifications.length === 0 ? (
+                      <div className="px-4 py-8 text-center text-xs text-slate-500">
+                        No new orders or requests yet.
+                      </div>
+                    ) : (
+                      adminNotifications.map((notification) => (
+                        <button
+                          key={notification.id}
+                          type="button"
+                          onClick={() => void handleOpenAdminNotification(notification)}
+                          className={`block w-full border-b border-slate-100 px-4 py-3 text-left transition-colors hover:bg-slate-50 ${notification.isRead ? 'bg-white' : 'bg-blue-50/70'}`}
+                        >
+                          <div className="flex items-start gap-2">
+                            {!notification.isRead && (
+                              <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-blue-600" />
+                            )}
+                            <span className="min-w-0 flex-1">
+                              <span className="flex items-center justify-between gap-2">
+                                <span className="text-xs font-bold text-slate-950">{notification.title}</span>
+                                <span className="shrink-0 text-[10px] font-mono text-slate-400">
+                                  {new Date(notification.createdAt).toLocaleString()}
+                                </span>
+                              </span>
+                              <span className="mt-1 block text-[11px] leading-5 text-slate-600">
+                                {notification.message}
+                              </span>
+                              <span className="mt-1 block text-[10px] font-semibold text-blue-700">
+                                {notification.customerName} · {notification.amountEtb.toLocaleString()} ETB
+                              </span>
+                            </span>
+                          </div>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={onLogout}
+              className="min-h-[44px] px-3 sm:px-4 rounded-xl border border-slate-200 hover:bg-slate-50 text-xs font-semibold text-slate-950 inline-flex items-center gap-2 cursor-pointer whitespace-nowrap"
+            >
+              <LogOut className="h-4 w-4 text-slate-600" />
+              <span>Logout</span>
+            </button>
+          </div>
         </div>
       </header>
 
