@@ -213,6 +213,26 @@ export interface BroadcastItem {
   createdAt: string;
 }
 
+export type AdminNotificationEvent =
+  | 'vip_purchase'
+  | 'welfare_purchase'
+  | 'deposit_request'
+  | 'withdrawal_request';
+
+export interface AdminNotificationItem {
+  id: string;
+  eventType: AdminNotificationEvent;
+  title: string;
+  message: string;
+  referenceId: string;
+  customerId: string | null;
+  customerName: string;
+  amountEtb: number;
+  targetSection: 'customers' | 'deposits' | 'withdrawals';
+  isRead: boolean;
+  createdAt: string;
+}
+
 export interface AuditLogEntry {
   id: string;
   actor: string;
