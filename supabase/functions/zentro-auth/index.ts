@@ -60,6 +60,40 @@ function json(data: unknown, status = 200, headers: HeadersInit = {}) {
     headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", ...headers },
   });
 }
+type AdminNotificationEvent =
+  | "vip_purchase"
+  | "welfare_purchase"
+  | "deposit_request"
+  | "withdrawal_request";
+
+async function addAdminNotification(input: {
+  eventType: AdminNotificationEvent;
+  title: string;
+  message: string;
+  referenceId: string;
+  customerId: string;
+  customerName: string;
+  amountEtb: number;
+  targetSection: "customers" | "deposits" | "withdrawals";
+}): Promise<void> {
+  try {
+    const { error } = await db.from("admin_notifications").upsert({
+      id: "anm-" + crypto.randomUUID().slice(0, 12),
+      event_type: input.eventType,
+      title: input.title,
+      message: input.message,
+      reference_id: input.referenceId,
+      customer_id: input.customerId,
+      customer_name: input.customerName,
+      amount_etb: input.amountEtb,
+      target_section: input.targetSection,
+      is_read: false
+    }, { onConflict: "event_type,reference_id", ignoreDuplicates: true });
+    if (error) throw error;
+  } catch (error) {
+    console.error("Admin notification creation failed:", error);
+  }
+}
 function bytesToBase64Url(bytes: Uint8Array): string {
   let binary = "";
   for (const byte of bytes) binary += String.fromCharCode(byte);
@@ -629,6 +663,16 @@ async function handle(req: Request): Promise<Response> {
       title: "Deposit request received", message: "Your deposit request for " + amountEtb + " ETB is pending Admin verification.",
       type: "info", is_read: false
     });
+    await addAdminNotification({
+      eventType: "deposit_request",
+      title: "New Deposit Request",
+      message: String(auth.name || "A customer") + " submitted a deposit request.",
+      referenceId: id,
+      customerId: auth.userId,
+      customerName: String(auth.name || "Customer"),
+      amountEtb,
+      targetSection: "deposits"
+    });
     return json({ ok: true, id }, 201);
   }
 
@@ -671,6 +715,16 @@ async function handle(req: Request): Promise<Response> {
       if (String(error.message || "").includes("Insufficient wallet balance")) return json({ error: "Insufficient wallet balance." }, 400);
       throw error;
     }
+    await addAdminNotification({
+      eventType: "withdrawal_request",
+      title: "New Withdrawal Request",
+      message: String(auth.name || "A customer") + " submitted a withdrawal request.",
+      referenceId: id,
+      customerId: auth.userId,
+      customerName: String(auth.name || "Customer"),
+      amountEtb,
+      targetSection: "withdrawals"
+    });
     return json({ ok: true, id, walletBalanceEtb: Number(newBalance) }, 201);
   }
 
@@ -713,6 +767,56 @@ async function handle(req: Request): Promise<Response> {
     if (method !== "GET" && !isAllowedAppRequest(req)) {
       return json({ error: "Administrative changes are available only from an approved ZENTRO application domain." }, 403);
     }
+  }
+
+  if (method === "GET" && route === "/admin/notifications") {
+    const [notificationsRes, unreadRes] = await Promise.all([
+      db.from("admin_notifications")
+        .select("id,event_type,title,message,reference_id,customer_id,customer_name,amount_etb,target_section,is_read,created_at")
+        .order("created_at", { ascending: false })
+        .limit(30),
+      db.from("admin_notifications")
+        .select("id", { count: "exact", head: true })
+        .eq("is_read", false)
+    ]);
+    if (notificationsRes.error) throw notificationsRes.error;
+    if (unreadRes.error) throw unreadRes.error;
+    return json({
+      notifications: (notificationsRes.data || []).map((item) => ({
+        id: item.id,
+        eventType: item.event_type,
+        title: item.title,
+        message: item.message,
+        referenceId: item.reference_id,
+        customerId: item.customer_id,
+        customerName: item.customer_name,
+        amountEtb: Number(item.amount_etb),
+        targetSection: item.target_section,
+        isRead: Boolean(item.is_read),
+        createdAt: item.created_at
+      })),
+      unreadCount: unreadRes.count || 0
+    });
+  }
+
+  if (method === "POST" && route === "/admin/notifications/read") {
+    const body = await req.json().catch(() => ({}));
+    let query = db.from("admin_notifications")
+      .update({ is_read: true })
+      .eq("is_read", false);
+    if (body.markAll === true) {
+      // Mark all current admin notifications as read.
+    } else if (Array.isArray(body.notificationIds) &&
+               body.notificationIds.length > 0 &&
+               body.notificationIds.length <= 100 &&
+               body.notificationIds.every((id: unknown) => typeof id === "string")) {
+      query = query.in("id", body.notificationIds);
+    } else {
+      return json({ error: "Select one or more notifications to mark as read." }, 400);
+    }
+    const { data, error } = await query.select("id");
+    if (error) throw error;
+    return json({ ok: true, markedRead: data?.length || 0 });
   }
 
   if (method === "GET" && route === "/admin/overview") {
@@ -1235,6 +1339,16 @@ async function handle(req: Request): Promise<Response> {
       });
       if (error) throw error;
       if (!data?.ok) return json({ error: data?.error || "Plan purchase could not be completed." }, 400);
+      await addAdminNotification({
+        eventType: "vip_purchase",
+        title: "New VIP Plan Order",
+        message: String(auth.name || "A customer") + " purchased " + plan.tier + ".",
+        referenceId: id,
+        customerId: auth.userId,
+        customerName: String(auth.name || "Customer"),
+        amountEtb: plan.investmentEtb,
+        targetSection: "customers"
+      });
       return json(data, 201);
     }
 
@@ -1262,6 +1376,16 @@ async function handle(req: Request): Promise<Response> {
       });
       if (error) throw error;
       if (!data?.ok) return json({ error: data?.error || "Welfare plan purchase could not be completed." }, 400);
+      await addAdminNotification({
+        eventType: "welfare_purchase",
+        title: "New Welfare Plan Order",
+        message: String(auth.name || "A customer") + " purchased " + plan.name + ".",
+        referenceId: id,
+        customerId: auth.userId,
+        customerName: String(auth.name || "Customer"),
+        amountEtb: plan.investmentEtb,
+        targetSection: "customers"
+      });
       return json(data, 201);
     }
 
