@@ -42,6 +42,7 @@ import {
   apiAdminToggleCustomerStatus,
   apiAdminUpdateFeedbackStatus,
   apiAdminUpdatePaymentSettings,
+  apiAdminUpdateRewardSettings,
   apiAdminWithdrawals,
   uploadImageUrl,
   BANK_TRANSFER_FEATURES_ENABLED,
@@ -378,6 +379,27 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       setPaymentDraft(saved);
       showNotice(true, 'Payment settings saved and logged.');
       await loadAllAdminData();
+    } catch (err) {
+      showNotice(false, (err as Error).message);
+    }
+  };
+
+  const handleSaveRewardSettings = async () => {
+    if (!paymentDraft) return;
+    try {
+      const saved = await apiAdminUpdateRewardSettings({
+        registrationBonusEtb: paymentDraft.registrationBonusEtb,
+        dailyCheckInEtb: paymentDraft.dailyCheckInEtb,
+      });
+      setPaymentDraft((current) => current ? {
+        ...current,
+        registrationBonusEtb: saved.registrationBonusEtb,
+        dailyCheckInEtb: saved.dailyCheckInEtb,
+      } : current);
+      showNotice(
+        true,
+        `Reward settings saved: Registration ${saved.registrationBonusEtb} ETB; Daily check-in ${saved.dailyCheckInEtb} ETB.`
+      );
     } catch (err) {
       showNotice(false, (err as Error).message);
     }
@@ -1635,6 +1657,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         <option value="verified_deposit">Verified Bank Deposit (future approved deposits only)</option>
                       </select>
                     </label>
+                    <div className="flex flex-wrap items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={handleSaveRewardSettings}
+                        className="min-h-[40px] px-4 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold inline-flex items-center gap-2 cursor-pointer"
+                      >
+                        <Check className="h-4 w-4" />
+                        <span>Save Reward Settings</span>
+                      </button>
+                      <p className="text-[11px] text-slate-500">
+                        Saves Registration Bonus and Daily Check-in separately from bank and withdrawal settings.
+                      </p>
+                    </div>
                   </div>
 
                   <button
