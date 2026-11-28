@@ -415,6 +415,15 @@ export async function apiAdminUpdatePaymentSettings(
   });
 }
 
+export async function apiAdminUpdateRewardSettings(
+  settings: Pick<PaymentSettings, 'registrationBonusEtb' | 'dailyCheckInEtb'>
+): Promise<PaymentSettings> {
+  return apiRequest('/admin/payment-settings', {
+    method: 'PUT',
+    body: JSON.stringify(settings),
+  });
+}
+
 export async function apiAdminGiftCodes(): Promise<{ giftCodes: GiftCodeItem[] }> {
   return apiRequest('/admin/gift-codes');
 }
