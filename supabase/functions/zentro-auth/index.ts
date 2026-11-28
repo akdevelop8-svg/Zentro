@@ -1099,7 +1099,7 @@ async function handle(req: Request): Promise<Response> {
 
   if (method === "PUT" && route === "/admin/payment-settings") {
     const body = await req.json().catch(() => ({}));
-    const row: Record<string, unknown> = { id: "default", updated_at: new Date().toISOString() };
+    const row: Record<string, unknown> = { updated_at: new Date().toISOString() };
     for (const key of ["depositMethods", "withdrawalMethods"] as const) {
       if (body[key] === undefined) continue;
       if (!Array.isArray(body[key]) || body[key].length > 10) return json({ error: "Payment methods must be arrays with at most 10 entries." }, 400);
@@ -1168,14 +1168,34 @@ async function handle(req: Request): Promise<Response> {
       if (typeof body.withdrawalScheduleNote !== "string" || body.withdrawalScheduleNote.length > 250) return json({ error: "Withdrawal schedule note is too long." }, 400);
       row.withdrawal_schedule_note = body.withdrawalScheduleNote.trim();
     }
-    const { error } = await db.from("payment_settings").upsert(row, { onConflict: "id" });
+    const { data: updatedRows, error } = await db.from("payment_settings")
+      .update(row).eq("id", "default").select("id");
     if (error) throw error;
-    await db.from("audit_logs").insert({
+    if (!updatedRows?.length) return json({ error: "Payment settings were not found." }, 404);
+
+    const savedSettings = await getPaymentSettings();
+    const savedValues = savedSettings as unknown as Record<string, unknown>;
+    for (const key of Object.keys(numericMap)) {
+      if (body[key] === undefined) continue;
+      if (Number(savedValues[key]) !== Number(body[key])) {
+        return json({ error: "The requested setting did not persist. Please retry and verify the saved value." }, 500);
+      }
+    }
+
+    const changedFields = Object.entries(row)
+      .filter(([key]) => key !== "updated_at")
+      .map(([key, value]) => {
+        if (key === "deposit_methods_json") return "depositMethods updated";
+        if (key === "withdrawal_methods_json") return "withdrawalMethods updated";
+        return key + "=" + String(value);
+      });
+    const { error: auditError } = await db.from("audit_logs").insert({
       id: "aud-" + crypto.randomUUID().slice(0, 12), actor: adminUsername(),
-      action: "Bank payment settings updated", target: "payment_settings",
-      details: "Updated bank deposit/withdrawal methods and limits; reward and commission settings unchanged"
+      action: "Payment settings updated", target: "payment_settings",
+      details: changedFields.join("; ")
     });
-    return json(await getPaymentSettings());
+    if (auditError) throw auditError;
+    return json(savedSettings);
   }
 
   if (method === "GET" && route === "/admin/audit-logs") {
