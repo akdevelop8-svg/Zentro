@@ -2,6 +2,7 @@ import {
   AdminCustomerDetailPayload,
   AdminCustomerSummary,
   AdminOverviewData,
+  AdminNotificationItem,
   AuditLogEntry,
   AuthSessionUser,
   BankAccountInfo,
@@ -297,6 +298,23 @@ export async function apiAdminDeposits(): Promise<{
   deposits: DepositRequestItem[];
 }> {
   return apiRequest('/admin/deposits');
+}
+
+export async function apiAdminNotifications(): Promise<{
+  notifications: AdminNotificationItem[];
+  unreadCount: number;
+}> {
+  return apiRequest('/admin/notifications');
+}
+
+export async function apiAdminMarkNotificationsRead(payload: {
+  notificationIds?: string[];
+  markAll?: boolean;
+}): Promise<{ ok: boolean; markedRead: number }> {
+  return apiRequest('/admin/notifications/read', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
 }
 
 export async function apiAdminApproveDeposit(
